@@ -1,0 +1,20 @@
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    environment:
+      - LOG_LEVEL=debug
+
+  worker:
+    volumes:
+      - ./backend:/app
+    environment:
+      - LOG_LEVEL=debug
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
