@@ -47,7 +47,29 @@ export default function OptimizationResultPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Optimization Results</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Optimization Results</h1>
+        <div className="flex gap-2">
+          <a
+            href={`/api/v1/optimizations/${optimizationId}/download`}
+            className="rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
+          >
+            Download PDF
+          </a>
+          <button
+            onClick={async () => {
+              await fetch(`/api/v1/optimizations/${optimizationId}/regenerate`, {
+                method: "POST",
+                headers: authHeaders,
+              });
+              window.location.reload();
+            }}
+            className="rounded-md border px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Regenerate
+          </button>
+        </div>
+      </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <div className="rounded-lg bg-white p-4 shadow-sm text-center">

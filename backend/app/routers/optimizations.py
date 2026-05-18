@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime, date
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlalchemy import select, update
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.auth import verify_token
@@ -15,10 +16,10 @@ from app.schemas.optimization import (
     OptimizationInitResponse,
     OptimizationListResponse,
 )
-from app.services.scoring import calculate_pre_score
+from app.services.scoring import calculate_pre_score, calculate_post_score
 from app.services.optimizer import identify_gaps, extract_bullets_from_resume, rewrite_bullets
-from app.services.embedding import embed_resume, embed_jd, cosine_similarity
-from app.services.llm_client import get_llm_client
+from app.services.pdf_generator import generate_pdf, generate_cover_letter_pdf
+from app.services.cover_letter import generate_cover_letter_text
 from app.config import settings
 
 router = APIRouter(prefix="/api/v1", tags=["optimizations"])
@@ -215,6 +216,19 @@ async def process_optimization(
         optimization.optimized_bullets = optimized_bullets
         optimization.fabrication_flags = fabrication_flags
         optimization.model_used = settings.AI_MODEL_REWRITE
+
+        pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets)
+        optimization.output_file_path = pdf_path
+
+        try:
+            cover_body = await generate_cover_letter_text(
+                resume.parsed_text or "",
+                jd.raw_text,
+            )
+            optimization.cover_letter_text = cover_body
+        except Exception:
+            pass
+
         optimization.status = "completed"
         optimization.processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
 
@@ -264,6 +278,39 @@ async def regenerate_bullet(
 
     optimization.optimized_bullets = optimized_bullets
     optimization.fabrication_flags = fabrication_flags
+
+    resume_structured = resume.structured_data or {}
+    try:
+        pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets)
+        optimization.output_file_path = pdf_path
+    except Exception:
+        pass
+
     await db.commit()
     await db.refresh(optimization)
     return optimization
+
+
+@router.get("/optimizations/{optimization_id}/download")
+async def download_optimized_pdf(
+    optimization_id: uuid.UUID,
+    token: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Optimization).where(
+            Optimization.id == optimization_id,
+            Optimization.user_id == token["user_id"],
+        )
+    )
+    optimization = result.scalar_one_or_none()
+    if not optimization:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimization not found")
+    if not optimization.output_file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not yet generated")
+
+    return FileResponse(
+        optimization.output_file_path,
+        media_type="application/pdf",
+        filename=f"optimized_resume_{optimization_id}.pdf",
+    )
