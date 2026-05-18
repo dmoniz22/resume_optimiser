@@ -35,7 +35,12 @@ export const authOptions: NextAuthOptions = {
 
         if (!res.ok) return null;
         const data = await res.json();
-        return { id: data.user.id, email: data.user.email, name: data.user.full_name };
+        return {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.full_name,
+          accessToken: data.token,
+        };
       },
     }),
   ],
@@ -44,6 +49,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.email = user.email;
+        token.accessToken = (user as any).accessToken;
       }
       return token;
     },
@@ -51,6 +57,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.email = token.email as string;
+        (session as any).accessToken = token.accessToken;
       }
       return session;
     },
