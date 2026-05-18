@@ -39,3 +39,5 @@ data/resumes/*
 
 # Alembic
 alembic.ini
+*.kate-swp
+*.swp
