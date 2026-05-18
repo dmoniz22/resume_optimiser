@@ -67,3 +67,13 @@ class AgentRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchTrend(Base):
+    __tablename__ = "research_trends"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_key: Mapped[str] = mapped_column(String(100), nullable=False, default="resume_optimizer")
+    subreddit_browses: Mapped[dict | None] = mapped_column(JSONB)
+    keyword_searches: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

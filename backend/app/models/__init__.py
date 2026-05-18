@@ -8,6 +8,7 @@ from app.models.subscription import (
     CreditUsage,
     BlogPost,
     AgentRun,
+    ResearchTrend,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "CreditUsage",
     "BlogPost",
     "AgentRun",
+    "ResearchTrend",
 ]
