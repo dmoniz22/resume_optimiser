@@ -19,13 +19,13 @@ PDF_STYLES = """
         border-bottom: 1.5pt solid #2c3e50;
     }
     .name {
-        font-size: 18pt;
+        font-size: 16pt;
         font-weight: 700;
-        margin-bottom: 3pt;
+        margin-bottom: 2pt;
         color: #1a1a1a;
     }
     .contact {
-        font-size: 9.5pt;
+        font-size: 9pt;
         color: #555;
     }
     .section-title {

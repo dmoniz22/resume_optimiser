@@ -1,4 +1,5 @@
 import uuid
+import re
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy import select
@@ -161,15 +162,44 @@ def fallback_parse(text: str) -> dict:
     for line in lines[:5]:
         if "@" in line:
             structured["email"] = line.strip()
+        if re.match(r".*[\d]{3}.*[\d]{3}.*[\d]{4}", line):
+            structured["phone"] = line.strip()
 
-    current_section = {"title": "Content", "bullets": []}
+    section_keywords = [
+        "experience", "employment", "work history", "professional experience",
+        "education", "academic", "training",
+        "skills", "technical skills", "clinical skills", "core competencies",
+        "volunteer", "community", "service",
+        "teaching", "academic appointments", "faculty",
+        "membership", "affiliation", "professional society",
+        "presentation", "publication", "research",
+        "certification", "licensure", "license", "board",
+        "award", "honor", "achievement",
+        "language", "interest",
+        "summary", "profile", "objective",
+    ]
+
+    current_section = {"title": "Summary", "bullets": []}
+    bullet_count = 0
+
     for line in lines[1:]:
-        if line.isupper() or line.endswith(":") or line.lower() in ("experience", "education", "skills", "projects", "summary", "certifications"):
+        line_lower = line.lower().rstrip(":")
+        is_header = False
+
+        for kw in section_keywords:
+            if line_lower == kw or line_lower.startswith(kw) or line_lower.endswith(kw):
+                if len(line_lower) < 50:
+                    is_header = True
+                    break
+
+        if is_header and len(line_lower) < 50:
             if current_section["bullets"]:
                 structured["sections"].append(current_section)
-            current_section = {"title": line.rstrip(":"), "bullets": []}
-        elif len(line) > 5:
+            current_section = {"title": line.strip().rstrip(":"), "bullets": []}
+            bullet_count = 0
+        elif len(line) > 3:
             current_section["bullets"].append({"text": line, "is_quantified": False})
+            bullet_count += 1
 
     if current_section["bullets"]:
         structured["sections"].append(current_section)
