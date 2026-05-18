@@ -1,20 +1,8 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import EmailProvider from "next-auth/providers/email";
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    EmailProvider({
-      server: {
-        host: "api.resend.com",
-        port: 465,
-        auth: {
-          user: "resend",
-          pass: process.env.RESEND_API_KEY!,
-        },
-      },
-      from: process.env.EMAIL_FROM || "noreply@resume-optimizer.com",
-    }),
     CredentialsProvider({
       name: "credentials",
       credentials: {

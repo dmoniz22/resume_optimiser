@@ -78,7 +78,7 @@ export default function AdminPage() {
             onChange={(e) => setKey(e.target.value)}
             className="w-full rounded-md border px-3 py-2 mb-4"
             placeholder="Enter INTERNAL_API_KEY"
-            autoFocus
+            autoComplete="new-password"
           />
           <button type="submit" className="w-full rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">
             Enter
