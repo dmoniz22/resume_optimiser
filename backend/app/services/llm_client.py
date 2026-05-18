@@ -1,17 +1,75 @@
+import json
+import httpx
 from openai import OpenAI
 from app.config import settings
 
-_llm_client: OpenAI | None = None
+_llm_client: httpx.Client | None = None
 _embed_client: OpenAI | None = None
 
 
-def get_llm_client() -> OpenAI:
+class LLMResponse:
+    def __init__(self, content: str):
+        self.choices = [LLMChoice(content)]
+
+
+class LLMChoice:
+    def __init__(self, content: str):
+        self.message = LLMMessage(content)
+
+
+class LLMMessage:
+    def __init__(self, content: str):
+        self.content = content
+
+
+class LLMClient:
+    def __init__(self):
+        self._client = httpx.Client(verify=False, timeout=120)
+
+    @property
+    def chat(self):
+        return self
+
+    @property
+    def completions(self):
+        return self
+
+    def create(
+        self,
+        model: str,
+        messages: list[dict],
+        temperature: float = 0.3,
+        max_tokens: int = 4096,
+        response_format: dict | None = None,
+        **kwargs,
+    ) -> LLMResponse:
+        body: dict = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }
+
+        resp = self._client.post(
+            f"{settings.OLLAMA_CLOUD_BASE_URL}/api/chat",
+            json=body,
+            headers={
+                "Authorization": f"Bearer {settings.OLLAMA_CLOUD_API_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return LLMResponse(data["message"]["content"])
+
+
+def get_llm_client() -> LLMClient:
     global _llm_client
     if _llm_client is None:
-        _llm_client = OpenAI(
-            base_url=settings.OLLAMA_CLOUD_BASE_URL,
-            api_key=settings.OLLAMA_CLOUD_API_KEY,
-        )
+        _llm_client = LLMClient()
     return _llm_client
 
 

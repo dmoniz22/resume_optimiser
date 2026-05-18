@@ -6,29 +6,29 @@ from app.services.llm_client import get_llm_client
 
 PARSE_PROMPT = """Extract structured data from this resume text. Output ONLY valid JSON, no other text.
 
-{
+{{
   "full_name": "string or null",
   "email": "string or null",
   "phone": "string or null",
   "location": "string or null",
   "sections": [
-    {
-      "title": "Work Experience | Education | Skills | Projects | Certifications | etc.",
+    {{
+      "title": "Work Experience | Education | Skills | Projects | Certifications",
       "bullets": [
-        {
+        {{
           "text": "bullet text",
           "is_quantified": false
-        }
+        }}
       ]
-    }
+    }}
   ],
-  "skills_detected": {
-    "hard": ["Python", "React", ...],
-    "soft": ["Leadership", "Communication", ...]
-  },
+  "skills_detected": {{
+    "hard": ["Python", "React"],
+    "soft": ["Leadership", "Communication"]
+  }},
   "years_of_experience": 5.0,
-  "education": [{"degree": "string", "school": "string", "year": 2020}]
-}
+  "education": [{{"degree": "string", "school": "string", "year": 2020}}]
+}}
 
 Resume text:
 {text}"""

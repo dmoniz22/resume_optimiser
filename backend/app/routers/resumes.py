@@ -133,9 +133,45 @@ async def reparse_resume(
     try:
         structured = await parse_resume_text(resume.parsed_text)
         resume.structured_data = structured
-        await db.commit()
-        await db.refresh(resume)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Parsing failed: {str(e)}")
+    except Exception:
+        resume.structured_data = fallback_parse(resume.parsed_text)
 
+    await db.commit()
+    await db.refresh(resume)
     return resume
+
+
+def fallback_parse(text: str) -> dict:
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    if not lines:
+        return {}
+
+    structured: dict = {
+        "full_name": None,
+        "email": None,
+        "phone": None,
+        "location": None,
+        "sections": [],
+        "skills_detected": {"hard": [], "soft": []},
+        "years_of_experience": None,
+        "education": [],
+    }
+
+    structured["full_name"] = lines[0] if "@" not in lines[0] else None
+    for line in lines[:5]:
+        if "@" in line:
+            structured["email"] = line.strip()
+
+    current_section = {"title": "Content", "bullets": []}
+    for line in lines[1:]:
+        if line.isupper() or line.endswith(":") or line.lower() in ("experience", "education", "skills", "projects", "summary", "certifications"):
+            if current_section["bullets"]:
+                structured["sections"].append(current_section)
+            current_section = {"title": line.rstrip(":"), "bullets": []}
+        elif len(line) > 5:
+            current_section["bullets"].append({"text": line, "is_quantified": False})
+
+    if current_section["bullets"]:
+        structured["sections"].append(current_section)
+
+    return structured
