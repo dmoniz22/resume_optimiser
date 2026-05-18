@@ -29,20 +29,29 @@ export default function OptimizationResultPage() {
   useEffect(() => {
     if (!session) return;
 
+    let cancelled = false;
     const poll = async () => {
-      const res = await fetch(`/api/v1/optimizations/${optimizationId}`, { headers: authHeaders });
-      if (!res.ok) return;
-      const data = await res.json();
-      setOpt(data);
+      try {
+        const res = await fetch(`/api/v1/optimizations/${optimizationId}`, { headers: authHeaders });
+        if (!res.ok) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setOpt(data);
 
-      if (data.status === "pending" || data.status === "processing") {
-        setTimeout(poll, 2000);
-      } else {
-        setLoading(false);
+        if (data.status === "pending" || data.status === "processing") {
+          if (!cancelled) setTimeout(poll, 2000);
+        } else {
+          if (!cancelled) setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
       }
     };
 
     poll();
+    return () => { cancelled = true; };
   }, [optimizationId, session]);
 
   if (loading || opt?.status === "processing" || opt?.status === "pending") {
