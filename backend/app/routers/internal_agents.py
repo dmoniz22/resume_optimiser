@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.config import settings
 from app.models.subscription import BlogPost, Subscription, ResearchTrend, AgentRun, SubscriptionTier
+from app.models.user import User
+from app.models.resume import Resume
+from app.models.optimization import Optimization
 
 router = APIRouter(prefix="/api/v1/internal/agents", tags=["internal"])
 
@@ -168,3 +171,151 @@ async def get_research(
         }
         for t in trends
     ]
+
+
+# --- User Management ---
+
+@router.get("/users")
+async def list_users(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await verify_internal(request)
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    users = result.scalars().all()
+
+    output = []
+    for u in users:
+        sub_result = await db.execute(
+            select(Subscription, SubscriptionTier)
+            .join(SubscriptionTier, Subscription.tier_id == SubscriptionTier.id)
+            .where(Subscription.user_id == u.id, Subscription.status == "active")
+            .order_by(Subscription.created_at.desc())
+        )
+        sub_row = sub_result.first()
+
+        opt_result = await db.execute(
+            select(func.count()).select_from(Optimization).where(Optimization.user_id == u.id)
+        )
+        opt_count = opt_result.scalar() or 0
+
+        tier_name = None
+        if sub_row:
+            _, tier = sub_row
+            tier_name = tier.name
+
+        output.append({
+            "id": str(u.id),
+            "email": u.email,
+            "full_name": u.full_name,
+            "auth_provider": u.auth_provider,
+            "email_verified": u.email_verified,
+            "tier": tier_name or "free",
+            "optimizations": opt_count,
+            "created_at": u.created_at.isoformat(),
+        })
+
+    return output
+
+
+@router.put("/users/{user_id}/tier")
+async def assign_user_tier(
+    user_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await verify_internal(request)
+    body = await request.json()
+    tier_name = body.get("tier")
+
+    tier_result = await db.execute(select(SubscriptionTier).where(SubscriptionTier.name == tier_name))
+    tier = tier_result.scalar_one_or_none()
+    if not tier:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tier not found")
+
+    existing = await db.execute(
+        select(Subscription).where(Subscription.user_id == user_id, Subscription.status == "active")
+    )
+    sub = existing.scalar_one_or_none()
+
+    if sub:
+        sub.tier_id = tier.id
+    else:
+        sub = Subscription(user_id=user_id, tier_id=tier.id, status="active")
+        db.add(sub)
+
+    await db.commit()
+    return {"status": "ok", "user_id": str(user_id), "tier": tier_name}
+
+
+# --- Tier Management ---
+
+@router.get("/tiers")
+async def list_tiers(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await verify_internal(request)
+    result = await db.execute(select(SubscriptionTier).order_by(SubscriptionTier.name))
+    tiers = result.scalars().all()
+    return [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "stripe_price_id": t.stripe_price_id,
+            "monthly_price_cents": t.monthly_price_cents,
+            "credits_per_month": t.credits_per_month,
+            "features": t.features,
+            "is_active": t.is_active,
+        }
+        for t in tiers
+    ]
+
+
+@router.put("/tiers/{tier_id}")
+async def update_tier(
+    tier_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await verify_internal(request)
+    body = await request.json()
+
+    result = await db.execute(select(SubscriptionTier).where(SubscriptionTier.id == tier_id))
+    tier = result.scalar_one_or_none()
+    if not tier:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tier not found")
+
+    for field in ("name", "stripe_price_id", "monthly_price_cents", "credits_per_month", "features", "is_active"):
+        if field in body:
+            setattr(tier, field, body[field])
+
+    await db.commit()
+    await db.refresh(tier)
+    return {
+        "id": str(tier.id),
+        "name": tier.name,
+        "monthly_price_cents": tier.monthly_price_cents,
+        "credits_per_month": tier.credits_per_month,
+        "features": tier.features,
+        "is_active": tier.is_active,
+    }
+
+
+# --- Model Configuration Display ---
+
+@router.get("/models")
+async def get_models(
+    request: Request,
+):
+    await verify_internal(request)
+    from app.config import settings as s
+    return {
+        "rewrite": s.AI_MODEL_REWRITE,
+        "parse": s.AI_MODEL_PARSE,
+        "extract": s.AI_MODEL_EXTRACT,
+        "cover_letter": s.AI_MODEL_COVER_LETTER,
+        "embedding": s.EMBEDDING_MODEL,
+        "cloud_base_url": s.OLLAMA_CLOUD_BASE_URL,
+        "local_url": s.LOCAL_OLLAMA_URL,
+    }
