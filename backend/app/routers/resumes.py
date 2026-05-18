@@ -158,11 +158,10 @@ def fallback_parse(text: str) -> dict:
         "education": [],
     }
 
-    structured["full_name"] = lines[0] if "@" not in lines[0] else None
-    for line in lines[:5]:
-        if "@" in line:
+    for line in lines[:6]:
+        if "@" in line and not structured["email"]:
             structured["email"] = line.strip()
-        if re.match(r".*[\d]{3}.*[\d]{3}.*[\d]{4}", line):
+        if re.match(r".*[\d]{3}.*[\d]{3}.*[\d]{4}", line) and not structured["phone"]:
             structured["phone"] = line.strip()
 
     section_keywords = [
@@ -171,7 +170,7 @@ def fallback_parse(text: str) -> dict:
         "skills", "technical skills", "clinical skills", "core competencies",
         "volunteer", "community", "service",
         "teaching", "academic appointments", "faculty",
-        "membership", "affiliation", "professional society",
+        "membership", "affiliation", "professional society", "committee",
         "presentation", "publication", "research",
         "certification", "licensure", "license", "board",
         "award", "honor", "achievement",
@@ -180,26 +179,30 @@ def fallback_parse(text: str) -> dict:
     ]
 
     current_section = {"title": "Summary", "bullets": []}
-    bullet_count = 0
 
     for line in lines[1:]:
-        line_lower = line.lower().rstrip(":")
-        is_header = False
+        line_lower = line.lower().rstrip(":").rstrip(".")
 
-        for kw in section_keywords:
-            if line_lower == kw or line_lower.startswith(kw) or line_lower.endswith(kw):
-                if len(line_lower) < 50:
+        is_header = False
+        if line.isupper() and len(line) >= 5 and any(c.isalpha() and c.lower() in 'aeiou' for c in line):
+            is_header = True
+        elif line.endswith(":") and len(line) < 40:
+            is_header = True
+        else:
+            for kw in section_keywords:
+                if line_lower == kw or line_lower.rstrip("s") == kw:
+                    is_header = True
+                    break
+                if kw.count(" ") >= 1 and line_lower.startswith(kw):
                     is_header = True
                     break
 
-        if is_header and len(line_lower) < 50:
+        if is_header:
             if current_section["bullets"]:
                 structured["sections"].append(current_section)
             current_section = {"title": line.strip().rstrip(":"), "bullets": []}
-            bullet_count = 0
-        elif len(line) > 3:
+        elif len(line) > 2:
             current_section["bullets"].append({"text": line, "is_quantified": False})
-            bullet_count += 1
 
     if current_section["bullets"]:
         structured["sections"].append(current_section)

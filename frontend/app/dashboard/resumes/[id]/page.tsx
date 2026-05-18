@@ -52,8 +52,15 @@ export default function ResumeDetailPage() {
 
   async function handleReparse() {
     setReparsing(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 360000); // 6 min
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/resumes/${id}/reparse`, { method: "POST", headers: authHeaders });
+      const res = await fetch(`http://localhost:8000/api/v1/resumes/${id}/reparse`, {
+        method: "POST",
+        headers: authHeaders,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
       if (res.ok) {
         const data = await res.json();
         setResume(data);
@@ -61,9 +68,14 @@ export default function ResumeDetailPage() {
         const err = await res.json().catch(() => ({ detail: "Re-parse failed" }));
         alert(err.detail || "Re-parse failed");
       }
-    } catch {
-      alert("Could not connect. Please try again.");
+    } catch (e: any) {
+      if (e.name === "AbortError") {
+        alert("Re-parse timed out. The AI is taking too long — a basic parse has been applied.");
+      } else {
+        alert("Could not connect. Please try again.");
+      }
     } finally {
+      clearTimeout(timeout);
       setReparsing(false);
     }
   }

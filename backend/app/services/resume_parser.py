@@ -66,17 +66,25 @@ async def parse_resume_text(raw_text: str) -> dict:
         model=settings.AI_MODEL_PARSE,
         messages=[
             {"role": "system", "content": "You are a resume parsing assistant. Output ONLY valid JSON. Preserve original section titles exactly."},
-            {"role": "user", "content": PARSE_PROMPT.format(text=raw_text[:15000])},
+            {"role": "user", "content": PARSE_PROMPT.format(text=raw_text[:10000])},
         ],
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=8192,
     )
     content = response.choices[0].message.content.strip()
     if content.startswith("```"):
         content = content.split("\n", 1)[1]
         if content.endswith("```"):
             content = content[:-3]
-    result = json.loads(content)
+    try:
+        result = json.loads(content)
+    except json.JSONDecodeError:
+        if not content.endswith("}"):
+            content = content.rstrip() + "\n    ]\n  }\n}"
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError:
+            raise ValueError("AI returned invalid JSON — please try again")
     return clean_sections(result)
 
 

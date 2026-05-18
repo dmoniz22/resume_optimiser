@@ -24,7 +24,7 @@ class LLMMessage:
 
 class LLMClient:
     def __init__(self):
-        self._client = httpx.Client(verify=False, timeout=120)
+        self._client = httpx.Client(verify=False, timeout=300)
 
     @property
     def chat(self):
