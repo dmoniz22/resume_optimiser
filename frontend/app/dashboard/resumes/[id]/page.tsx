@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 interface Section {
@@ -28,9 +28,15 @@ interface ResumeData {
 
 export default function ResumeDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { data: session } = useSession();
   const [resume, setResume] = useState<ResumeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showOptimize, setShowOptimize] = useState(false);
+  const [jds, setJds] = useState<any[]>([]);
+  const [selectedJd, setSelectedJd] = useState("");
+  const [optimizing, setOptimizing] = useState(false);
+  const [optError, setOptError] = useState("");
 
   const authHeaders = { Authorization: `Bearer ${(session as any)?.accessToken || ""}` };
 
@@ -46,6 +52,45 @@ export default function ResumeDetailPage() {
     window.location.reload();
   }
 
+  async function handleOptimize() {
+    if (!selectedJd) return;
+    setOptimizing(true);
+    setOptError("");
+
+    try {
+      const res = await fetch("/api/v1/optimize", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ resume_id: id, jd_id: selectedJd }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.detail || "Failed to start optimization");
+      }
+      const data = await res.json();
+
+      const procRes = await fetch(`/api/v1/optimizations/${data.id}/process`, {
+        method: "POST",
+        headers: authHeaders,
+      });
+      if (!procRes.ok) throw new Error("Processing failed");
+
+      const result = await procRes.json();
+      router.push(`/dashboard/optimize/${result.id}`);
+    } catch (err: any) {
+      setOptError(err.message);
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
+  function openOptimize() {
+    fetch("/api/v1/jds", { headers: authHeaders })
+      .then((r) => r.json())
+      .then((d) => setJds(d.jds || []));
+    setShowOptimize(true);
+  }
+
   if (loading) return <p className="text-gray-500">Loading...</p>;
   if (!resume) return <p className="text-red-600">Resume not found.</p>;
 
@@ -55,13 +100,53 @@ export default function ResumeDetailPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{resume.title}</h1>
-        <button
-          onClick={handleReparse}
-          className="rounded-md border px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-        >
-          Re-parse
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={openOptimize}
+            className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm text-white hover:bg-indigo-700"
+          >
+            Optimize
+          </button>
+          <button
+            onClick={handleReparse}
+            className="rounded-md border px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Re-parse
+          </button>
+        </div>
       </div>
+
+      {showOptimize && (
+        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
+          <h3 className="font-medium mb-3">Select Job Description</h3>
+          {optError && <p className="mb-3 text-sm text-red-600">{optError}</p>}
+          {jds.length === 0 ? (
+            <p className="text-sm text-gray-500">No job descriptions yet. Create one first.</p>
+          ) : (
+            <div className="flex gap-3 items-end">
+              <select
+                value={selectedJd}
+                onChange={(e) => setSelectedJd(e.target.value)}
+                className="flex-1 rounded-md border px-3 py-2"
+              >
+                <option value="">-- Choose a job description --</option>
+                {jds.map((jd: any) => (
+                  <option key={jd.id} value={jd.id}>
+                    {jd.title || "Untitled"} {jd.company ? `at ${jd.company}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleOptimize}
+                disabled={!selectedJd || optimizing}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {optimizing ? "Optimizing..." : "Optimize"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {sd ? (
         <div className="space-y-6">
