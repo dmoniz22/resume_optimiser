@@ -70,14 +70,12 @@ export default function ResumeDetailPage() {
       }
       const data = await res.json();
 
-      const procRes = await fetch(`/api/v1/optimizations/${data.id}/process`, {
+      await fetch(`/api/v1/optimizations/${data.id}/process`, {
         method: "POST",
         headers: authHeaders,
       });
-      if (!procRes.ok) throw new Error("Processing failed");
 
-      const result = await procRes.json();
-      router.push(`/dashboard/optimize/${result.id}`);
+      router.push(`/dashboard/optimize/${data.id}`);
     } catch (err: any) {
       setOptError(err.message);
     } finally {

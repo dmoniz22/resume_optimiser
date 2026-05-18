@@ -27,13 +27,33 @@ export default function OptimizationResultPage() {
   const authHeaders = { Authorization: `Bearer ${(session as any)?.accessToken || ""}` };
 
   useEffect(() => {
-    fetch(`/api/v1/optimizations/${optimizationId}`, { headers: authHeaders })
-      .then((r) => r.json())
-      .then(setOpt)
-      .finally(() => setLoading(false));
-  }, [optimizationId]);
+    if (!session) return;
 
-  if (loading) return <p className="text-gray-500">Loading...</p>;
+    const poll = async () => {
+      const res = await fetch(`/api/v1/optimizations/${optimizationId}`, { headers: authHeaders });
+      if (!res.ok) return;
+      const data = await res.json();
+      setOpt(data);
+
+      if (data.status === "pending" || data.status === "processing") {
+        setTimeout(poll, 2000);
+      } else {
+        setLoading(false);
+      }
+    };
+
+    poll();
+  }, [optimizationId, session]);
+
+  if (loading || opt?.status === "processing" || opt?.status === "pending") {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
+        <p className="text-gray-600">Optimizing your resume...</p>
+        <p className="mt-2 text-sm text-gray-400">This may take a minute or two.</p>
+      </div>
+    );
+  }
   if (!opt) return <p className="text-red-600">Optimization not found.</p>;
 
   if (opt.status === "failed") {

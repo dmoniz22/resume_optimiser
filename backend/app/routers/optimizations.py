@@ -1,10 +1,11 @@
 import uuid
+import asyncio
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
+from app.database import get_db, AsyncSessionLocal
 from app.auth import verify_token
 from app.models.optimization import Optimization
 from app.models.resume import Resume
@@ -169,79 +170,89 @@ async def process_optimization(
     if optimization.status not in ("pending", "processing"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Optimization already completed or failed")
 
-    start_time = datetime.utcnow()
+    optimization.status = "processing"
+    await db.commit()
 
-    try:
-        resume_result = await db.execute(select(Resume).where(Resume.id == optimization.resume_id))
-        resume = resume_result.scalar_one_or_none()
-        jd_result = await db.execute(select(JobDescription).where(JobDescription.id == optimization.jd_id))
-        jd = jd_result.scalar_one_or_none()
-
-        if not resume or not jd:
-            raise ValueError("Resume or JD not found")
-
-        if not resume.parsed_text:
-            optimization.status = "failed"
-            optimization.error_message = "Resume text not extracted"
-            await db.commit()
-            return optimization
-
-        pre_score = await calculate_pre_score(str(resume.id), str(jd.id), db)
-
-        resume_structured = resume.structured_data or {}
-        jd_keywords = jd.extracted_keywords or {}
-
-        gaps = identify_gaps(resume_structured, jd_keywords)
-
-        bullets = extract_bullets_from_resume(resume_structured)
-        if not bullets and resume_structured:
-            bullets = [{"section": "Content", "bullet_index": i, "text": resume.parsed_text.split("\n")[i]}
-                       for i in range(min(20, len(resume.parsed_text.split("\n")))) if resume.parsed_text.split("\n")[i].strip()]
-
-        original_bullets_data = [{"section": b["section"], "bullet_index": b["bullet_index"], "text": b["text"]} for b in bullets]
-        keywords_str = ", ".join(gaps[:30]) if gaps else ", ".join(jd_keywords.get("hard_skills", []) + jd_keywords.get("soft_skills", []))
-
-        optimized_bullets, fabrication_flags = await rewrite_bullets(
-            bullets, keywords_str, resume.parsed_text or ""
-        )
-
-        resume.structured_data = resume_structured
-        await db.commit()
-
-        post_score = await calculate_post_score(str(resume.id), str(jd.id), db)
-
-        optimization.pre_score = pre_score
-        optimization.post_score = post_score
-        optimization.original_bullets = original_bullets_data
-        optimization.optimized_bullets = optimized_bullets
-        optimization.fabrication_flags = fabrication_flags
-        optimization.model_used = settings.AI_MODEL_REWRITE
-
-        pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets)
-        optimization.output_file_path = pdf_path
-
-        try:
-            cover_body = await generate_cover_letter_text(
-                resume.parsed_text or "",
-                jd.raw_text,
-            )
-            optimization.cover_letter_text = cover_body
-        except Exception:
-            pass
-
-        optimization.status = "completed"
-        optimization.processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-
-        await record_credit_use(token["user_id"], db)
-        await db.commit()
-        await db.refresh(optimization)
-
-    except Exception as e:
-        optimization.status = "failed"
-        optimization.error_message = str(e)
-        await db.commit()
+    asyncio.create_task(_run_optimization_pipeline(str(optimization_id), token["user_id"]))
 
     return optimization
+
+
+async def _run_optimization_pipeline(optimization_id: str, user_id: str):
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Optimization).where(Optimization.id == optimization_id))
+        optimization = result.scalar_one_or_none()
+        if not optimization:
+            return
+
+        start_time = datetime.utcnow()
+
+        try:
+            resume_result = await db.execute(select(Resume).where(Resume.id == optimization.resume_id))
+            resume = resume_result.scalar_one_or_none()
+            jd_result = await db.execute(select(JobDescription).where(JobDescription.id == optimization.jd_id))
+            jd = jd_result.scalar_one_or_none()
+
+            if not resume or not jd:
+                raise ValueError("Resume or JD not found")
+
+            if not resume.parsed_text:
+                optimization.status = "failed"
+                optimization.error_message = "Resume text not extracted"
+                await db.commit()
+                return
+
+            pre_score = await calculate_pre_score(str(resume.id), str(jd.id), db)
+
+            resume_structured = resume.structured_data or {}
+            jd_keywords = jd.extracted_keywords or {}
+
+            gaps = identify_gaps(resume_structured, jd_keywords)
+            bullets = extract_bullets_from_resume(resume_structured)
+            if not bullets and resume_structured:
+                bullets = [{"section": "Content", "bullet_index": i, "text": resume.parsed_text.split("\n")[i]}
+                           for i in range(min(20, len(resume.parsed_text.split("\n")))) if resume.parsed_text.split("\n")[i].strip()]
+
+            original_bullets_data = [{"section": b["section"], "bullet_index": b["bullet_index"], "text": b["text"]} for b in bullets]
+            keywords_str = ", ".join(gaps[:30]) if gaps else ", ".join(jd_keywords.get("hard_skills", []) + jd_keywords.get("soft_skills", []))
+
+            optimized_bullets, fabrication_flags = await rewrite_bullets(
+                bullets, keywords_str, resume.parsed_text or ""
+            )
+
+            resume.structured_data = resume_structured
+            await db.commit()
+
+            post_score = await calculate_post_score(str(resume.id), str(jd.id), db)
+
+            optimization.pre_score = pre_score
+            optimization.post_score = post_score
+            optimization.original_bullets = original_bullets_data
+            optimization.optimized_bullets = optimized_bullets
+            optimization.fabrication_flags = fabrication_flags
+            optimization.model_used = settings.AI_MODEL_REWRITE
+
+            pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets)
+            optimization.output_file_path = pdf_path
+
+            try:
+                cover_body = await generate_cover_letter_text(
+                    resume.parsed_text or "",
+                    jd.raw_text,
+                )
+                optimization.cover_letter_text = cover_body
+            except Exception:
+                pass
+
+            optimization.status = "completed"
+            optimization.processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+            await record_credit_use(user_id, db)
+            await db.commit()
+
+        except Exception as e:
+            optimization.status = "failed"
+            optimization.error_message = str(e)
+            await db.commit()
 
 
 @router.post("/optimizations/{optimization_id}/regenerate", response_model=OptimizationResponse)
