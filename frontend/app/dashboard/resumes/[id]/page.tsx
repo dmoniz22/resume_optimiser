@@ -38,6 +38,8 @@ export default function ResumeDetailPage() {
   const [optimizing, setOptimizing] = useState(false);
   const [optError, setOptError] = useState("");
 
+  const [reparsing, setReparsing] = useState(false);
+
   const authHeaders = { Authorization: `Bearer ${(session as any)?.accessToken || ""}` };
 
   useEffect(() => {
@@ -49,8 +51,14 @@ export default function ResumeDetailPage() {
   }, [id, session]);
 
   async function handleReparse() {
-    await fetch(`/api/v1/resumes/${id}/reparse`, { method: "POST", headers: authHeaders });
-    window.location.reload();
+    setReparsing(true);
+    const res = await fetch(`/api/v1/resumes/${id}/reparse`, { method: "POST", headers: authHeaders });
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      alert("Re-parse failed. Check console for details.");
+      setReparsing(false);
+    }
   }
 
   async function handleOptimize() {
@@ -108,9 +116,10 @@ export default function ResumeDetailPage() {
           </button>
           <button
             onClick={handleReparse}
-            className="rounded-md border px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            disabled={reparsing}
+            className="rounded-md border px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
           >
-            Re-parse
+            {reparsing ? "Parsing..." : "Re-parse"}
           </button>
         </div>
       </div>
@@ -213,9 +222,10 @@ export default function ResumeDetailPage() {
           <p className="text-gray-500 mb-4">This resume hasn&apos;t been parsed yet.</p>
           <button
             onClick={handleReparse}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+            disabled={reparsing}
+            className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            Parse Now
+            {reparsing ? "Parsing..." : "Parse Now"}
           </button>
         </div>
       )}
