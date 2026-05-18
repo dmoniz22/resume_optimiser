@@ -79,12 +79,22 @@ export default function OptimizationResultPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Optimization Results</h1>
         <div className="flex gap-2">
-          <a
-            href={`/api/v1/optimizations/${optimizationId}/download`}
+          <button
+            onClick={async () => {
+              const res = await fetch(`/api/v1/optimizations/${optimizationId}/download`, { headers: authHeaders });
+              if (!res.ok) return alert("Download failed");
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `optimized_resume_${optimizationId}.pdf`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
             className="rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
           >
             Download PDF
-          </a>
+          </button>
           <button
             onClick={async () => {
               await fetch(`/api/v1/optimizations/${optimizationId}/regenerate`, {
