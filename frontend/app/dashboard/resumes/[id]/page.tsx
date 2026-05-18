@@ -56,7 +56,12 @@ export default function ResumeDetailPage() {
     if (res.ok) {
       window.location.reload();
     } else {
-      alert("Re-parse failed. Check console for details.");
+      try {
+        const err = await res.json();
+        alert(err.detail || "Re-parse failed");
+      } catch {
+        alert("Re-parse failed. Check console.");
+      }
       setReparsing(false);
     }
   }

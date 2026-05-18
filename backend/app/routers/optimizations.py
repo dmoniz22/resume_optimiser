@@ -18,7 +18,7 @@ from app.schemas.optimization import (
     OptimizationListResponse,
 )
 from app.services.scoring import calculate_pre_score, calculate_post_score
-from app.services.optimizer import identify_gaps, extract_bullets_from_resume, rewrite_bullets
+from app.services.optimizer import identify_gaps, extract_bullets_from_resume, rewrite_bullets, optimize_summary, reorder_skills
 from app.services.pdf_generator import generate_pdf, generate_cover_letter_pdf
 from app.services.cover_letter import generate_cover_letter_text
 from app.config import settings
@@ -219,6 +219,36 @@ async def _run_optimization_pipeline(optimization_id: str, user_id: str):
             optimized_bullets, fabrication_flags = await rewrite_bullets(
                 bullets, keywords_str, resume.parsed_text or ""
             )
+
+            # Optimize summary/profile section
+            for section in resume_structured.get("sections", []):
+                if section.get("title", "").lower() in ("summary", "profile", "objective", "professional summary"):
+                    bullets_list = section.get("bullets", [])
+                    if bullets_list:
+                        original_summary = bullets_list[0].get("text", bullets_list[0]) if isinstance(bullets_list[0], dict) else str(bullets_list[0])
+                        try:
+                            new_summary = await optimize_summary(original_summary, keywords_str)
+                            if new_summary and len(new_summary) > 20:
+                                bullets_list[0] = {"text": new_summary, "is_quantified": False} if isinstance(bullets_list[0], dict) else new_summary
+                        except Exception:
+                            pass
+                    break
+
+            # Reorder skills
+            skills_data = resume_structured.get("skills_detected", {}) or {}
+            hard_skills = skills_data.get("hard", [])
+            if hard_skills:
+                try:
+                    reordered = await reorder_skills(hard_skills, keywords_str)
+                    if reordered:
+                        skills_data["hard"] = reordered
+                        resume_structured["skills_detected"] = skills_data
+                        for section in resume_structured.get("sections", []):
+                            if section.get("title", "").lower() in ("skills", "technical skills", "core competencies", "clinical skills"):
+                                section["bullets"] = [{"text": ", ".join(reordered), "is_quantified": False}]
+                                break
+                except Exception:
+                    pass
 
             resume.structured_data = resume_structured
             await db.commit()

@@ -34,6 +34,26 @@ Job Description Keywords: {keywords}
 Resume Bullets:
 {bullets}"""
 
+SUMMARY_PROMPT = """Rewrite this professional summary/profile to better match the target job description.
+Do NOT invent experience or skills. Output ONLY the rewritten summary text, no JSON, no explanation.
+
+Target Job Keywords: {keywords}
+
+Original Summary:
+{summary}
+
+Rewritten Summary:"""
+
+SKILLS_PROMPT = """Reorder and group these skills to prioritize those mentioned in the job description.
+Put JD-matching skills first, then related skills, then remaining skills.
+Output ONLY a comma-separated list, no JSON, no explanation.
+
+Job Keywords: {keywords}
+
+Skills: {skills}
+
+Reordered Skills:"""
+
 
 def extract_all_skills_and_tools(text: str) -> set[str]:
     text_lower = text.lower()
@@ -151,3 +171,36 @@ def extract_bullets_from_resume(structured_data: dict) -> list[dict]:
                 "text": bullet.get("text", bullet) if isinstance(bullet, dict) else bullet,
             })
     return bullets
+
+
+async def optimize_summary(summary_text: str, jd_keywords_str: str) -> str:
+    if not summary_text.strip():
+        return summary_text
+    client = get_llm_client()
+    response = client.chat.completions.create(
+        model=settings.AI_MODEL_REWRITE,
+        messages=[
+            {"role": "system", "content": "You are a professional resume writer. Never fabricate experience."},
+            {"role": "user", "content": SUMMARY_PROMPT.format(summary=summary_text[:2000], keywords=jd_keywords_str)},
+        ],
+        temperature=0.3,
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content.strip()
+
+
+async def reorder_skills(skills_list: list[str], jd_keywords_str: str) -> list[str]:
+    if not skills_list or len(skills_list) < 2:
+        return skills_list
+    client = get_llm_client()
+    response = client.chat.completions.create(
+        model=settings.AI_MODEL_EXTRACT,
+        messages=[
+            {"role": "system", "content": "Reorder skills to prioritize job description matches. Output comma-separated only."},
+            {"role": "user", "content": SKILLS_PROMPT.format(skills=", ".join(skills_list), keywords=jd_keywords_str)},
+        ],
+        temperature=0.1,
+        max_tokens=512,
+    )
+    result = response.choices[0].message.content.strip()
+    return [s.strip() for s in result.split(",") if s.strip()]
