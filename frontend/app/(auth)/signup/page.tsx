@@ -68,6 +68,7 @@ export default function SignupPage() {
             placeholder="Min. 8 characters"
             required
             minLength={8}
+            autoComplete="new-password"
           />
           <button
             type="submit"

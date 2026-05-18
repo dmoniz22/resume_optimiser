@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!session) return;
     async function fetchResumes() {
       try {
         const res = await fetch("/api/v1/resumes", {
@@ -32,7 +33,7 @@ export default function DashboardPage() {
       }
     }
     fetchResumes();
-  }, []);
+  }, [session]);
 
   return (
     <div>

@@ -41,11 +41,12 @@ export default function ResumeDetailPage() {
   const authHeaders = { Authorization: `Bearer ${(session as any)?.accessToken || ""}` };
 
   useEffect(() => {
+    if (!session) return;
     fetch(`/api/v1/resumes/${id}`, { headers: authHeaders })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then(setResume)
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, session]);
 
   async function handleReparse() {
     await fetch(`/api/v1/resumes/${id}/reparse`, { method: "POST", headers: authHeaders });

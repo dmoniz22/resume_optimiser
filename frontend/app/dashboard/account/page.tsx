@@ -19,10 +19,11 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!session) return;
     fetch("/api/v1/auth/account", {
       headers: { Authorization: `Bearer ${(session as any)?.accessToken || ""}` },
     })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then(setAccount)
       .finally(() => setLoading(false));
   }, [session]);

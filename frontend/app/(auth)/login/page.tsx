@@ -105,6 +105,7 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-md border px-3 py-2 mb-4"
             required
+            autoComplete="current-password"
           />
           <button
             type="submit"
