@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel
 
 
@@ -16,14 +17,14 @@ class OptimizationResponse(BaseModel):
     status: str
     pre_score: float | None
     post_score: float | None
-    original_bullets: dict | None
-    optimized_bullets: dict | None
+    original_bullets: Any | None = None
+    optimized_bullets: Any | None = None
     cover_letter_text: str | None
     output_file_path: str | None
     processing_time_ms: int | None
     model_used: str | None
     error_message: str | None
-    fabrication_flags: dict | None
+    fabrication_flags: Any | None = None
     credit_cost: int
     created_at: datetime
     completed_at: datetime | None
