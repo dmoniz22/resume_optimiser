@@ -1,4 +1,5 @@
 import uuid
+import bcrypt
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, func
@@ -175,6 +176,52 @@ async def get_research(
 
 
 # --- User Management ---
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+async def create_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await verify_internal(request)
+    body = await request.json()
+    email = body.get("email")
+    password = body.get("password", "changeme123")
+    full_name = body.get("full_name")
+    tier_name = body.get("tier", "free")
+
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email required")
+
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    user = User(
+        email=email,
+        full_name=full_name,
+        password_hash=bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(),
+        auth_provider="email",
+        email_verified=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    if tier_name != "free":
+        tier_result = await db.execute(select(SubscriptionTier).where(SubscriptionTier.name == tier_name))
+        tier = tier_result.scalar_one_or_none()
+        if tier:
+            sub = Subscription(user_id=user.id, tier_id=tier.id, status="active")
+            db.add(sub)
+            await db.commit()
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "tier": tier_name,
+    }
+
 
 @router.get("/users")
 async def list_users(

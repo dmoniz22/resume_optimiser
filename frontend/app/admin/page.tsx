@@ -109,6 +109,25 @@ export default function AdminPage() {
     setUsers(Array.isArray(await res.json()) ? await res.json() : []);
   }
 
+  async function createUser(e: React.FormEvent) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const body: Record<string, string> = {};
+    form.forEach((v, k) => { body[k] = v as string; });
+    const res = await fetch("/api/v1/internal/agents/users", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      alert((await res.json()).detail || "Failed to create user");
+      return;
+    }
+    e.currentTarget.reset();
+    const usersRes = await fetch("/api/v1/internal/agents/users", { headers: authHeaders() });
+    setUsers(Array.isArray(await usersRes.json()) ? await usersRes.json() : []);
+  }
+
   async function updateTier(tierId: string, updates: Partial<TierData>) {
     await fetch(`/api/v1/internal/agents/tiers/${tierId}`, {
       method: "PUT",
@@ -203,7 +222,33 @@ export default function AdminPage() {
         )}
 
         {tab === "users" && (
-          <div className="rounded-lg bg-white shadow-sm overflow-x-auto">
+          <>
+            <form onSubmit={createUser} className="mb-4 rounded-lg bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Email</label>
+                  <input name="email" type="email" required className="rounded border px-2 py-1.5 text-sm w-48" placeholder="beta@example.com" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Name</label>
+                  <input name="full_name" type="text" className="rounded border px-2 py-1.5 text-sm w-36" placeholder="Jane Doe" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Password</label>
+                  <input name="password" type="text" className="rounded border px-2 py-1.5 text-sm w-36" placeholder="changeme123" defaultValue="changeme123" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tier</label>
+                  <select name="tier" className="rounded border px-2 py-1.5 text-sm">
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                    <option value="career">Career</option>
+                  </select>
+                </div>
+                <button type="submit" className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm text-white hover:bg-indigo-700">Add User</button>
+              </div>
+            </form>
+            <div className="rounded-lg bg-white shadow-sm overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-gray-500">
                 <tr>
@@ -257,6 +302,7 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {tab === "tiers" && (
