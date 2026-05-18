@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 interface MRRData {
   date: string;
@@ -23,29 +21,75 @@ interface ResearchTrend {
 }
 
 export default function AdminPage() {
-  const { data: session } = useSession();
-  const router = useRouter();
+  const [key, setKey] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [mrr, setMrr] = useState<MRRData | null>(null);
   const [trends, setTrends] = useState<ResearchTrend[]>([]);
-  const [loadingMrr, setLoadingMrr] = useState(true);
-  const [loadingTrends, setLoadingTrends] = useState(true);
+  const [loadingMrr, setLoadingMrr] = useState(false);
+  const [loadingTrends, setLoadingTrends] = useState(false);
 
-  useEffect(() => {
-    const key = prompt("Enter admin key");
-    if (!key) { router.push("/dashboard"); return; }
+  function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!key.trim()) return;
+
+    setLoadingMrr(true);
+    setLoadingTrends(true);
+    setAuthError("");
 
     const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
 
     fetch("/api/v1/internal/agents/financial", { method: "POST", headers })
-      .then((r) => r.json())
-      .then(setMrr)
-      .finally(() => setLoadingMrr(false));
+      .then((r) => {
+        if (r.status === 401) {
+          setAuthError("Invalid admin key");
+          setLoadingMrr(false);
+          setLoadingTrends(false);
+          return null;
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (data) {
+          setMrr(data);
+          setAuthenticated(true);
+        }
+        setLoadingMrr(false);
+      });
 
     fetch("/api/v1/internal/agents/research", { headers })
-      .then((r) => r.json())
-      .then(setTrends)
-      .finally(() => setLoadingTrends(false));
-  }, []);
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        setTrends(Array.isArray(data) ? data : []);
+        setLoadingTrends(false);
+      });
+  }
+
+  if (!authenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <form onSubmit={handleLogin} className="w-full max-w-sm rounded-lg bg-white p-8 shadow-md">
+          <h1 className="mb-6 text-xl font-bold text-center text-gray-900">Admin Dashboard</h1>
+          {authError && <p className="mb-4 text-sm text-red-600 text-center">{authError}</p>}
+          <label className="block text-sm font-medium text-gray-700 mb-1">Admin Key</label>
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            className="w-full rounded-md border px-3 py-2 mb-4"
+            placeholder="Enter INTERNAL_API_KEY"
+            autoFocus
+          />
+          <button type="submit" className="w-full rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">
+            Enter
+          </button>
+          <p className="mt-4 text-center text-xs text-gray-400">
+            The key is <code>INTERNAL_API_KEY</code> from your <code>.env</code> file
+          </p>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -81,7 +125,7 @@ export default function AdminPage() {
         <div className="mb-8 rounded-lg bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">System Health</h2>
           <div className="flex gap-4">
-            <a href="http://localhost:8000/health" target="_blank" className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50">API Health</a>
+            <a href="http://localhost:8000/health" target="_blank" rel="noreferrer" className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50">API Health</a>
             <span className="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700">Containers: 6 running</span>
             <span className="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700">DB: PostgreSQL 16</span>
           </div>
@@ -114,7 +158,7 @@ export default function AdminPage() {
                       <p className="text-xs font-medium text-gray-500 mb-1">Keyword Searches</p>
                       {Array.isArray(t.keyword_searches) && t.keyword_searches.map((k: any, i: number) => (
                         <div key={i} className="ml-2 text-sm">
-                          <span className="font-medium">"{k.query}"</span>
+                          <span className="font-medium">&ldquo;{k.query}&rdquo;</span>
                           {k.results && <span className="text-gray-500"> — {k.results.length} results</span>}
                         </div>
                       ))}
