@@ -99,6 +99,16 @@ export default function AdminPage() {
     setUsers(Array.isArray(await res.json()) ? await res.json() : []);
   }
 
+  async function deleteUser(userId: string, email: string) {
+    if (!confirm(`Permanently delete ${email} and all their data?`)) return;
+    await fetch(`/api/v1/internal/agents/users/${userId}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    const res = await fetch("/api/v1/internal/agents/users", { headers: authHeaders() });
+    setUsers(Array.isArray(await res.json()) ? await res.json() : []);
+  }
+
   async function updateTier(tierId: string, updates: Partial<TierData>) {
     await fetch(`/api/v1/internal/agents/tiers/${tierId}`, {
       method: "PUT",
@@ -203,6 +213,7 @@ export default function AdminPage() {
                   <th className="px-4 py-3 font-medium">Optimizations</th>
                   <th className="px-4 py-3 font-medium">Joined</th>
                   <th className="px-4 py-3 font-medium">Actions</th>
+                  <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -229,10 +240,19 @@ export default function AdminPage() {
                         <option value="career">Career</option>
                       </select>
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => deleteUser(u.id, u.email)}
+                        className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                        title="Delete user and all data"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {users.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No users yet</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No users yet</td></tr>
                 )}
               </tbody>
             </table>

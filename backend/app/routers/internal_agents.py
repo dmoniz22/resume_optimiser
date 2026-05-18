@@ -5,10 +5,11 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.config import settings
-from app.models.subscription import BlogPost, Subscription, ResearchTrend, AgentRun, SubscriptionTier
+from app.models.subscription import BlogPost, Subscription, ResearchTrend, AgentRun, SubscriptionTier, CreditUsage
 from app.models.user import User
 from app.models.resume import Resume
 from app.models.optimization import Optimization
+from app.models.job_description import JobDescription
 
 router = APIRouter(prefix="/api/v1/internal/agents", tags=["internal"])
 
@@ -246,6 +247,42 @@ async def assign_user_tier(
 
     await db.commit()
     return {"status": "ok", "user_id": str(user_id), "tier": tier_name}
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await verify_internal(request)
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    credit_rows = (await db.execute(select(CreditUsage).where(CreditUsage.user_id == user_id))).scalars().all()
+    for cr in credit_rows:
+        await db.delete(cr)
+
+    sub_rows = (await db.execute(select(Subscription).where(Subscription.user_id == user_id))).scalars().all()
+    for s in sub_rows:
+        await db.delete(s)
+
+    opt_rows = (await db.execute(select(Optimization).where(Optimization.user_id == user_id))).scalars().all()
+    for o in opt_rows:
+        await db.delete(o)
+
+    jd_rows = (await db.execute(select(JobDescription).where(JobDescription.user_id == user_id))).scalars().all()
+    for jd in jd_rows:
+        await db.delete(jd)
+
+    resume_rows = (await db.execute(select(Resume).where(Resume.user_id == user_id))).scalars().all()
+    for r in resume_rows:
+        await db.delete(r)
+
+    await db.delete(user)
+    await db.commit()
 
 
 # --- Tier Management ---
