@@ -1,51 +1,58 @@
-import uuid
 import os
 from app.config import settings
 
 PDF_STYLES = """
     @page {
         size: letter;
-        margin: 0.75in 1in;
+        margin: 0.6in 0.75in;
     }
     body {
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        font-size: 11pt;
-        line-height: 1.4;
+        font-size: 10.5pt;
+        line-height: 1.35;
         color: #1a1a1a;
     }
     .header {
         text-align: center;
-        margin-bottom: 12pt;
+        margin-bottom: 10pt;
+        padding-bottom: 8pt;
+        border-bottom: 1.5pt solid #2c3e50;
     }
     .name {
-        font-size: 24pt;
-        font-weight: bold;
-        margin-bottom: 4pt;
+        font-size: 18pt;
+        font-weight: 700;
+        margin-bottom: 3pt;
+        color: #1a1a1a;
     }
     .contact {
-        font-size: 10pt;
+        font-size: 9.5pt;
         color: #555;
     }
-    .contact span { margin: 0 8pt; }
     .section-title {
-        font-size: 12pt;
-        font-weight: bold;
-        border-bottom: 1.5px solid #333;
-        padding-bottom: 3pt;
-        margin-top: 16pt;
-        margin-bottom: 6pt;
+        font-size: 11pt;
+        font-weight: 700;
+        color: #2c3e50;
+        border-bottom: 0.8pt solid #2c3e50;
+        padding-bottom: 2pt;
+        margin-top: 14pt;
+        margin-bottom: 5pt;
         text-transform: uppercase;
-        letter-spacing: 1pt;
+        letter-spacing: 0.8pt;
     }
     .bullet {
-        margin-bottom: 4pt;
-        padding-left: 14pt;
-        text-indent: -14pt;
+        margin-bottom: 3pt;
+        padding-left: 12pt;
+        text-indent: -12pt;
+        text-align: justify;
     }
-    .bullet::before { content: "• "; }
-    .skill-tag {
-        display: inline-block;
-        margin-right: 6pt;
+    .bullet::before { content: "• "; color: #2c3e50; }
+    .skills-line {
+        margin-top: 2pt;
+        line-height: 1.5;
+    }
+    .education-entry {
+        margin-bottom: 1pt;
+        padding-left: 12pt;
     }
 """
 
@@ -63,13 +70,38 @@ def build_resume_html(structured_data: dict, optimized_bullets: list[dict] | Non
         contact_parts.append(phone)
     if location:
         contact_parts.append(location)
-    contact_line = " | ".join(contact_parts)
+    contact_line = "  |  ".join(contact_parts)
 
     sections_html = []
 
     for section in structured_data.get("sections", []):
-        title = section.get("title", "")
+        title = section.get("title", "").strip()
+        if not title:
+            continue
         bullets = section.get("bullets", [])
+
+        if title.lower() in ("skills", "technical skills", "core competencies"):
+            skills_text = []
+            for bullet in bullets:
+                t = bullet.get("text", bullet) if isinstance(bullet, dict) else bullet
+                skills_text.append(t)
+            combined = ", ".join(skills_text) if skills_text else ""
+            sections_html.append(
+                f'<div class="section-title">{title}</div>'
+                f'<div class="skills-line">{combined}</div>'
+            )
+            continue
+
+        if title.lower() in ("education", "academics"):
+            entries = []
+            for bullet in bullets:
+                t = bullet.get("text", bullet) if isinstance(bullet, dict) else bullet
+                entries.append(f'<div class="education-entry">{t}</div>')
+            sections_html.append(
+                f'<div class="section-title">{title}</div>'
+                f'{"".join(entries)}'
+            )
+            continue
 
         section_html = f'<div class="section-title">{title}</div>'
 
@@ -83,17 +115,19 @@ def build_resume_html(structured_data: dict, optimized_bullets: list[dict] | Non
                         bullet_text = opt.get("optimized", text)
                         break
 
+            if not bullet_text or not bullet_text.strip():
+                continue
             section_html += f'<div class="bullet">{bullet_text}</div>'
 
         sections_html.append(section_html)
 
     skills = structured_data.get("skills_detected", {}) or {}
     hard_skills = skills.get("hard", [])
-    if hard_skills:
-        skills_html = '<div class="section-title">Skills</div><div>'
-        skills_html += ", ".join(hard_skills)
-        skills_html += "</div>"
-        sections_html.append(skills_html)
+    if hard_skills and not any(s.lower() in ("skills", "technical skills", "core competencies") for s in (s_.get("title", "") for s_ in structured_data.get("sections", []))):
+        sections_html.append(
+            f'<div class="section-title">Skills</div>'
+            f'<div class="skills-line">{", ".join(hard_skills)}</div>'
+        )
 
     education = structured_data.get("education", []) or []
     if education:
@@ -102,13 +136,14 @@ def build_resume_html(structured_data: dict, optimized_bullets: list[dict] | Non
             degree = edu.get("degree", "")
             school = edu.get("school", "")
             year = edu.get("year", "")
-            edu_html += f'<div class="bullet">{degree} — {school}{" (" + str(year) + ")" if year else ""}</div>'
+            parts = [p for p in [degree, school, str(year) if year else ""] if p]
+            edu_html += f'<div class="education-entry">{" — ".join(parts)}</div>'
         sections_html.append(edu_html)
 
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{PDF_STYLES}</style></head>
 <body>
 <div class="header">
-    <div class="name">{name}</div>
+    <div class="name">{name or ""}</div>
     <div class="contact">{contact_line}</div>
 </div>
 {"".join(sections_html)}
@@ -134,7 +169,7 @@ def build_cover_letter_html(full_name: str, contact_info: str, body: str) -> str
     body {{ font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1a1a1a; }}
     .name {{ font-size: 16pt; font-weight: bold; margin-bottom: 2pt; }}
     .contact {{ font-size: 10pt; color: #555; margin-bottom: 16pt; }}
-    p {{ margin-bottom: 8pt; }}
+    p {{ margin-bottom: 8pt; text-align: justify; }}
 </style></head><body>
 <div class="name">{full_name}</div>
 <div class="contact">{contact_info}</div>
