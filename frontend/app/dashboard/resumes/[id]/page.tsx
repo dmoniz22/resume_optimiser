@@ -39,63 +39,31 @@ export default function ResumeDetailPage() {
   const [optError, setOptError] = useState("");
 
   const [reparsing, setReparsing] = useState(false);
-  const [aiParsing, setAiParsing] = useState(false);
 
   const authHeaders = { Authorization: `Bearer ${(session as any)?.accessToken || ""}` };
-
-  function isFallbackParse(sd: any) {
-    if (!sd) return true;
-    const sections = sd.sections || [];
-    const skills = sd.skills_detected || {};
-    if (sections.length > 0 && sections.every((s: any) => s.title === "Summary") && !skills.hard?.length) return true;
-    return false;
-  }
 
   useEffect(() => {
     if (!session) return;
     fetch(`/api/v1/resumes/${id}`, { headers: authHeaders })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        setResume(data);
-        setLoading(false);
-        if (data && isFallbackParse(data.structured_data)) {
-          handleReparse();
-        }
-      });
+      .then(setResume)
+      .finally(() => setLoading(false));
   }, [id, session]);
-
-  useEffect(() => {
-    if (!aiParsing || !resume) return;
-    const poll = setInterval(async () => {
-      const r = await fetch(`/api/v1/resumes/${id}`, { headers: authHeaders });
-      if (!r.ok) return;
-      const data = await r.json();
-      if (!isFallbackParse(data.structured_data)) {
-        setResume(data);
-        setAiParsing(false);
-        clearInterval(poll);
-      }
-    }, 3000);
-    return () => clearInterval(poll);
-  }, [aiParsing, id, session]);
 
   async function handleReparse() {
     setReparsing(true);
-    const res = await fetch(`/api/v1/resumes/${id}/reparse`, { method: "POST", headers: authHeaders });
-    if (res.ok) {
-      const data = await res.json();
-      setResume(data);
-      setReparsing(false);
-      if (isFallbackParse(data.structured_data)) {
-        setAiParsing(true);
-      }
-    } else {
-      try {
-        const err = await res.json();
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/resumes/${id}/reparse`, { method: "POST", headers: authHeaders });
+      if (res.ok) {
+        const data = await res.json();
+        setResume(data);
+      } else {
+        const err = await res.json().catch(() => ({ detail: "Re-parse failed" }));
         alert(err.detail || "Re-parse failed");
-      } catch {
-        alert("Re-parse failed. Check console.");
       }
+    } catch {
+      alert("Could not connect. Please try again.");
+    } finally {
       setReparsing(false);
     }
   }
@@ -145,12 +113,7 @@ export default function ResumeDetailPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{resume.title}</h1>
-          {aiParsing && (
-            <p className="text-xs text-indigo-600 mt-1">AI is refining the parse... page will update automatically.</p>
-          )}
-        </div>
+        <h1 className="text-2xl font-bold">{resume.title}</h1>
         <div className="flex gap-2">
           <button
             onClick={openOptimize}

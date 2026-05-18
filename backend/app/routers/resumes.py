@@ -131,29 +131,15 @@ async def reparse_resume(
     if not resume.parsed_text:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No parsed text available")
 
-    resume.structured_data = fallback_parse(resume.parsed_text)
+    try:
+        structured = await parse_resume_text(resume.parsed_text)
+        resume.structured_data = structured
+    except Exception:
+        resume.structured_data = fallback_parse(resume.parsed_text)
+
     await db.commit()
     await db.refresh(resume)
-
-    import asyncio
-    asyncio.create_task(_ai_reparse(str(resume.id), resume.parsed_text))
-
     return resume
-
-
-async def _ai_reparse(resume_id: str, text: str):
-    from app.database import AsyncSessionLocal
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Resume).where(Resume.id == resume_id))
-        resume = result.scalar_one_or_none()
-        if not resume:
-            return
-        try:
-            structured = await parse_resume_text(text)
-            resume.structured_data = structured
-            await db.commit()
-        except Exception:
-            pass
 
 
 def fallback_parse(text: str) -> dict:
