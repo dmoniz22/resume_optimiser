@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from app.routers import auth, resumes, jds, optimizations, billing, content, internal_agents
 
 
@@ -35,3 +36,8 @@ app.include_router(internal_agents.router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="http://localhost:3000")
