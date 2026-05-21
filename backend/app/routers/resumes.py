@@ -9,7 +9,7 @@ from app.auth import verify_token
 from app.models.resume import Resume
 from app.models.subscription import CreditUsage
 from app.schemas.resume import ResumeResponse, ResumeUpdate, ResumeListResponse
-from app.services.resume_parser import extract_text, parse_resume_text
+from app.services.resume_parser import extract_text, parse_resume_text, extract_text_from_docx
 from app.config import settings
 
 router = APIRouter(prefix="/api/v1/resumes", tags=["resumes"])
