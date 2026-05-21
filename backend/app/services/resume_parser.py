@@ -26,22 +26,22 @@ def is_education_line(line: str) -> bool:
     patterns = [
         r"(?i)^(master|bachelor|doctor|phd|fellowship|certificate|diploma) of",
         r"(?i)^(facrr[m]?|jcca)\b",
-        r"(?i)^(rural and remote medicine|general practice)",
-        r"(?i)\b(university of|college of|institute of|school of)",
+        r"(?i)^(rural and remote medicine|general practice)\b",
     ]
     return any(re.search(p, line) for p in patterns)
 
 
 def is_role_start(line: str) -> bool:
-    """Detect lines that start a new job role within Professional Experience."""
+    """Detect lines that start a new job role."""
     has_date = bool(re.search(r"\b\d{2}/\d{4}\b|\b\d{4}\s*[–-]\s*\d{4}\b|\bcurrent\b|\bpresent\b", line, re.IGNORECASE))
-    has_org = bool(re.search(r",\s*(.+)$", line))  # has a comma followed by organization
-    has_title = bool(re.search(
-        r"(?i)\b(head|director|physician|registrar|instructor|officer|practitioner|specialist|surgeon|nurse|anesthetist|lecturer|educator|fellow|intern|resident|manager|lead|coordinator|supervisor|general|staff|chair|honorary|adjunct|non-executive|board)\b",
+    has_org = bool(re.search(r",\s*.+", line))
+    # Only match CLEAR job titles (first word is a title)
+    first_word_title = bool(re.match(
+        r"(?i)^\s*(head|director|physician|registrar|instructor|officer|practitioner|specialist|surgeon|anesthetist|lecturer|educator|fellow|intern|resident|coordinator|supervisor|chair|honorary|adjunct|non-executive|board|interim|general|staff|clinical|medical|rural|emergency|telehealth)\b",
         line
     ))
     is_short = 15 < len(line) < 200
-    return (has_date and has_title) or (has_title and has_org and is_short)
+    return (has_date or has_org) and first_word_title and is_short
 
 
 def is_membership_line(line: str) -> bool:
@@ -137,19 +137,14 @@ async def parse_resume_text(raw_text: str) -> dict:
     while i < len(lines):
         line = lines[i]
         
-        # Check if we've hit a non-experience section
-        if is_membership_line(line) or is_certification_line(line) or is_publication_line(line) or is_presentation_line(line) or is_volunteer_line(line):
-            # Check if this is a cluster start (at least 2 lines of the new type)
-            j = i
-            cluster_count = 0
-            while j < len(lines) and j < i + 5:
-                if is_membership_line(lines[j]): cluster_count += 1
-                elif is_certification_line(lines[j]): cluster_count += 1
-                elif is_publication_line(lines[j]): cluster_count += 1
-                elif is_presentation_line(lines[j]): cluster_count += 1
-                elif is_volunteer_line(lines[j]): cluster_count += 1
-                j += 1
-            if cluster_count >= 2:
+        # Only break on CLEAR section transitions (publications, presentations, volunteer clusters)
+        if is_publication_line(line) or is_presentation_line(line) or is_volunteer_line(line):
+            # Confirm it's a real cluster (at least 2 consecutive lines matching the new type)
+            future_count = 0
+            for j in range(i, min(i+5, len(lines))):
+                if is_publication_line(lines[j]) or is_presentation_line(lines[j]) or is_volunteer_line(lines[j]):
+                    future_count += 1
+            if future_count >= 2:
                 break
         
         if is_role_start(line):
