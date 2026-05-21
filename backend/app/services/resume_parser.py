@@ -1,6 +1,6 @@
 import json
 import re
-from collections import Counter
+from collections import OrderedDict
 import fitz
 from docx import Document
 from app.config import settings
@@ -21,42 +21,66 @@ EXTRACT_META_PROMPT = """Extract basic metadata from this resume. Output ONLY va
 Resume text:
 {text}"""
 
-SECTION_PATTERNS = [
-    ("Education", [
+
+def is_education_line(line: str) -> bool:
+    patterns = [
         r"(?i)^(master|bachelor|doctor|phd|fellowship|certificate|diploma) of",
-        r"(?i)^(medical school|university|college) of",
         r"(?i)^(facrr[m]?|jcca)\b",
-    ]),
-    ("Professional Experience", [
-        r"(?i)\b(head|director|physician|registrar|instructor|officer|practitioner|specialist|surgeon|nurse|anesthetist|lecturer)\b",
-        r"(?i)\b(interim|clinical|medical|staff)\b",
-    ]),
-    ("Professional Memberships", [
+        r"(?i)^(rural and remote medicine|general practice)",
+        r"(?i)\b(university of|college of|institute of|school of)",
+    ]
+    return any(re.search(p, line) for p in patterns)
+
+
+def is_role_start(line: str) -> bool:
+    """Detect lines that start a new job role within Professional Experience."""
+    has_date = bool(re.search(r"\b\d{2}/\d{4}\b|\b\d{4}\s*[–-]\s*\d{4}\b|\bcurrent\b|\bpresent\b", line, re.IGNORECASE))
+    has_org = bool(re.search(r",\s*(.+)$", line))  # has a comma followed by organization
+    has_title = bool(re.search(
+        r"(?i)\b(head|director|physician|registrar|instructor|officer|practitioner|specialist|surgeon|nurse|anesthetist|lecturer|educator|fellow|intern|resident|manager|lead|coordinator|supervisor|general|staff|chair|honorary|adjunct|non-executive|board)\b",
+        line
+    ))
+    is_short = 15 < len(line) < 200
+    return (has_date and has_title) or (has_title and has_org and is_short)
+
+
+def is_membership_line(line: str) -> bool:
+    patterns = [
         r"(?i)^member\b",
         r"(?i)^registered with\b",
         r"(?i)\b(member of|member,)\b",
-    ]),
-    ("Certifications", [
-        r"(?i)\b(instructor|advanced|management|training|certified)\b",
-    ]),
-    ("Publications", [
-        r"(?i)\b(moniz| \(\d{4}\) |j\.\s|journal\b|neurosci|society for)",
-    ]),
-    ("Presentations", [
-        r"(?i)\b(presentation|conference|society for|annual meeting)",
-    ]),
-    ("Volunteer Experience", [
-        r"(?i)^(scouts|st john|ambulance|troop|cub|division)",
-    ]),
-]
+    ]
+    return any(re.search(p, line) for p in patterns)
 
 
-def classify_line(line: str) -> str:
-    for section_name, patterns in SECTION_PATTERNS:
-        for pat in patterns:
-            if re.search(pat, line):
-                return section_name
-    return ""
+def is_certification_line(line: str) -> bool:
+    patterns = [
+        r"(?i)\b(instructor|advanced life support|management of|early management|practical obstetric|pre-hospital|crisis management|effective management)\b",
+    ]
+    return any(re.search(p, line) for p in patterns)
+
+
+def is_publication_line(line: str) -> bool:
+    patterns = [
+        r"\(\d{4}\)",  # (2009)
+        r"(?i)\b(j\.\s|journal\b|neurosci|society for|publication|refereed)",
+    ]
+    return any(re.search(p, line) for p in patterns)
+
+
+def is_presentation_line(line: str) -> bool:
+    patterns = [
+        r"(?i)\b(presentation|conference|society for|annual meeting)\b",
+    ]
+    return any(re.search(p, line) for p in patterns)
+
+
+def is_volunteer_line(line: str) -> bool:
+    patterns = [
+        r"(?i)^(scouts|st john|ambulance|troop|cub|division,)",
+        r"(?i)(scout|venturer|volunteer)",
+    ]
+    return any(re.search(p, line) for p in patterns)
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -82,89 +106,95 @@ async def parse_resume_text(raw_text: str) -> dict:
     if not lines:
         return {}
 
-    # Classify every line
-    classified = [(classify_line(line) or "", line) for line in lines]
-    
-    # Determine dominant section type in sliding windows (smooth changes)
-    window = 3
-    smoothed = []
-    for i in range(len(classified)):
-        window_types = [classified[j][0] for j in range(max(0, i-window), min(len(classified), i+window+1)) if classified[j][0]]
-        if window_types:
-            from collections import Counter
-            most_common = Counter(window_types).most_common(1)[0][0]
-            smoothed.append(most_common)
-        else:
-            smoothed.append("")
-    
-    # Build sections from smoothed classifications
     sections = []
-    current_type = None
-    current_lines = []
-    
-    for i, (stype, line) in enumerate(zip(smoothed, [c[1] for c in classified])):
-        if stype and stype != current_type:
-            if current_lines:
-                sections.append({"title": current_type or "Professional Summary", "bullets": current_lines})
-            current_type = stype
-            current_lines = [{"text": line, "is_quantified": False}]
-        else:
-            if not current_type:
-                current_type = "Professional Summary"
-            current_lines.append({"text": line, "is_quantified": False})
-    
-    if current_lines:
-        sections.append({"title": current_type or "Professional Summary", "bullets": current_lines})
-    
-    # Merge tiny sections (< 3 bullets) into neighbors
-    # Also merge adjacent sections of the same type
-    merged = []
-    for s in sections:
-        if len(s["bullets"]) < 3 and merged:
-            merged[-1]["bullets"].extend(s["bullets"])
-        elif merged and merged[-1]["title"] == s["title"]:
-            merged[-1]["bullets"].extend(s["bullets"])
-        else:
-            merged.append(s)
-    sections = merged
-    
-    # Second pass: merge sections of same type that got separated
-    final = []
-    for s in sections:
-        if final and final[-1]["title"] == s["title"]:
-            final[-1]["bullets"].extend(s["bullets"])
-        else:
-            final.append(s)
-    sections = final
-    
-    # Third pass: merge Professional Memberships and Certifications into
-    # Professional Experience if they have < 5 bullets (probably inline mentions)
-    experience_idx = None
-    cleaned = []
-    for s in sections:
-        if s["title"] == "Professional Experience":
-            experience_idx = len(cleaned)
-            cleaned.append(s)
-        elif s["title"] in ("Professional Memberships", "Certifications") and len(s["bullets"]) < 5 and experience_idx is not None:
-            cleaned[experience_idx]["bullets"].extend(s["bullets"])
-        else:
-            experience_idx = None
-            cleaned.append(s)
-    sections = cleaned
+    i = 0
 
-    # Consolidate: merge all same-title sections into one
-    from collections import OrderedDict
-    consolidated: OrderedDict = OrderedDict()
-    section_order = []
-    for s in sections:
-        title = s["title"]
-        if title not in consolidated:
-            consolidated[title] = []
-            section_order.append(title)
-        consolidated[title].extend(s["bullets"])
-    sections = [{"title": t, "bullets": consolidated[t]} for t in section_order]
+    # --- Professional Summary (first paragraph) ---
+    if lines[0] and len(lines[0]) > 100 and not is_education_line(lines[0]) and not is_role_start(lines[0]):
+        summary_bullets = [{"text": lines[0], "is_quantified": False}]
+        # Include any continuation lines (short lines that aren't patterns)
+        i = 1
+        while i < len(lines) and not is_education_line(lines[i]) and not is_role_start(lines[i]) and not is_membership_line(lines[i]):
+            if len(lines[i]) > 30:
+                summary_bullets.append({"text": lines[i], "is_quantified": False})
+            i += 1
+        sections.append({"title": "Professional Summary", "bullets": summary_bullets})
+    else:
+        i = 0
 
-    # AI metadata extraction from first 3000 chars
+    # --- Education (max ~30 lines) ---
+    edu_bullets = []
+    edu_count = 0
+    while i < len(lines) and edu_count < 30 and (is_education_line(lines[i]) or (edu_bullets and not is_role_start(lines[i]) and not is_membership_line(lines[i]) and not is_certification_line(lines[i]) and not is_publication_line(lines[i]) and not is_presentation_line(lines[i]) and not is_volunteer_line(lines[i]))):
+        edu_bullets.append({"text": lines[i], "is_quantified": False})
+        i += 1
+        edu_count += 1
+    if edu_bullets:
+        sections.append({"title": "Education", "bullets": edu_bullets})
+
+    # --- Professional Experience (with role sub-sections) ---
+    exp_bullets = []
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check if we've hit a non-experience section
+        if is_membership_line(line) or is_certification_line(line) or is_publication_line(line) or is_presentation_line(line) or is_volunteer_line(line):
+            # Check if this is a cluster start (at least 2 lines of the new type)
+            j = i
+            cluster_count = 0
+            while j < len(lines) and j < i + 5:
+                if is_membership_line(lines[j]): cluster_count += 1
+                elif is_certification_line(lines[j]): cluster_count += 1
+                elif is_publication_line(lines[j]): cluster_count += 1
+                elif is_presentation_line(lines[j]): cluster_count += 1
+                elif is_volunteer_line(lines[j]): cluster_count += 1
+                j += 1
+            if cluster_count >= 2:
+                break
+        
+        if is_role_start(line):
+            exp_bullets.append({"text": f"── {line} ──", "is_quantified": False})
+        else:
+            exp_bullets.append({"text": line, "is_quantified": False})
+        i += 1
+    
+    if exp_bullets:
+        sections.append({"title": "Professional Experience", "bullets": exp_bullets})
+
+    # --- Remaining sections ---
+    remaining = []
+    while i < len(lines):
+        remaining.append({"text": lines[i], "is_quantified": False})
+        i += 1
+
+    if remaining:
+        # Classify remaining into sub-sections
+        sub_sections = OrderedDict()
+        current_type = None
+        
+        for b in remaining:
+            line = b["text"]
+            if is_membership_line(line):
+                current_type = "Professional Memberships"
+            elif is_certification_line(line):
+                current_type = "Certifications"
+            elif is_publication_line(line):
+                current_type = "Publications"
+            elif is_presentation_line(line):
+                current_type = "Presentations"
+            elif is_volunteer_line(line):
+                current_type = "Volunteer Experience"
+            
+            stype = current_type or "Other"
+            if stype not in sub_sections:
+                sub_sections[stype] = []
+            sub_sections[stype].append(b)
+        
+        for title, bullets in sub_sections.items():
+            if bullets:
+                sections.append({"title": title, "bullets": bullets})
+
+    # AI metadata extraction
     try:
         client = get_llm_client()
         resp = client.chat.completions.create(
