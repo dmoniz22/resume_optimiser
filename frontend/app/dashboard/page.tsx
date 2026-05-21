@@ -17,23 +17,34 @@ export default function DashboardPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  async function fetchResumes() {
     if (!session) return;
-    async function fetchResumes() {
-      try {
-        const res = await fetch("/api/v1/resumes", {
-          headers: { Authorization: `Bearer ${(session as any)?.accessToken || ""}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setResumes(data.resumes);
-        }
-      } finally {
-        setLoading(false);
+    try {
+      const res = await fetch("/api/v1/resumes", {
+        headers: { Authorization: `Bearer ${(session as any)?.accessToken || ""}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setResumes(data.resumes);
       }
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    setLoading(true);
     fetchResumes();
   }, [session]);
+
+  async function handleDelete(id: string, title: string) {
+    if (!confirm(`Permanently delete "${title}"? This cannot be undone.`)) return;
+    await fetch(`/api/v1/resumes/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${(session as any)?.accessToken || ""}` },
+    });
+    setResumes(resumes.filter((r) => r.id !== id));
+  }
 
   return (
     <div>
@@ -62,19 +73,25 @@ export default function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {resumes.map((r) => (
-            <Link
-              key={r.id}
-              href={`/dashboard/resumes/${r.id}`}
-              className="rounded-lg bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <h3 className="font-semibold text-gray-900 truncate">{r.title}</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {r.file_type?.toUpperCase()} · {new Date(r.created_at).toLocaleDateString()}
-              </p>
-              {r.structured_data && (
-                <p className="mt-2 text-xs text-green-600">Parsed</p>
-              )}
-            </Link>
+            <div key={r.id} className="rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
+              <Link href={`/dashboard/resumes/${r.id}`} className="block p-6 pb-2">
+                <h3 className="font-semibold text-gray-900 truncate">{r.title}</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {r.file_type?.toUpperCase()} · {new Date(r.created_at).toLocaleDateString()}
+                </p>
+                {r.structured_data && (
+                  <p className="mt-2 text-xs text-green-600">Parsed · {Object.keys(r.structured_data.sections || {}).length || r.structured_data.sections?.length || 0} sections</p>
+                )}
+              </Link>
+              <div className="px-6 pb-4">
+                <button
+                  onClick={(e) => { e.preventDefault(); handleDelete(r.id, r.title); }}
+                  className="text-xs text-red-600 hover:underline"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       )}

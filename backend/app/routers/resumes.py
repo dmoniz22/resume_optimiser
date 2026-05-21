@@ -1,4 +1,5 @@
 import uuid
+import os
 import re
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
@@ -7,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.auth import verify_token
 from app.models.resume import Resume
+from app.models.optimization import Optimization
 from app.models.subscription import CreditUsage
 from app.schemas.resume import ResumeResponse, ResumeUpdate, ResumeListResponse
-from app.services.resume_parser import extract_text, parse_resume_text, extract_text_from_docx
+from app.services.resume_parser import extract_text, parse_resume_text
 from app.config import settings
 
 router = APIRouter(prefix="/api/v1/resumes", tags=["resumes"])
@@ -113,7 +115,18 @@ async def delete_resume(
     if not resume:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
 
-    resume.is_archived = True
+    # Delete associated optimizations
+    opt_rows = (await db.execute(select(Optimization).where(Optimization.resume_id == resume_id))).scalars().all()
+    for o in opt_rows:
+        if o.output_file_path and os.path.exists(o.output_file_path):
+            os.remove(o.output_file_path)
+        await db.delete(o)
+
+    # Delete the file
+    if resume.original_file_path and os.path.exists(resume.original_file_path):
+        os.remove(resume.original_file_path)
+
+    await db.delete(resume)
     await db.commit()
 
 
