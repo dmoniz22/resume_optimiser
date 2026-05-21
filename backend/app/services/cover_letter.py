@@ -1,3 +1,4 @@
+import asyncio
 from app.config import settings
 from app.services.llm_client import get_llm_client
 
@@ -14,7 +15,8 @@ Output ONLY the cover letter body text, no subject line, no salutation, no signa
 
 async def generate_cover_letter_text(resume_summary: str, jd_text: str) -> str:
     client = get_llm_client()
-    response = client.chat.completions.create(
+    response = await asyncio.to_thread(
+        client.chat.completions.create,
         model=settings.AI_MODEL_COVER_LETTER,
         messages=[
             {"role": "system", "content": "You are a professional cover letter writer. Never fabricate experience."},

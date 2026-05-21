@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from app.config import settings
@@ -128,7 +129,8 @@ async def rewrite_bullets(bullets: list[dict], keywords: str, original_full_text
     client = get_llm_client()
     bullets_text = format_bullets_for_prompt(bullets)
 
-    response = client.chat.completions.create(
+    response = await asyncio.to_thread(
+        client.chat.completions.create,
         model=settings.AI_MODEL_REWRITE,
         messages=[
             {"role": "system", "content": "You are an expert resume optimizer. Follow all rules strictly. Output ONLY valid JSON."},
@@ -149,14 +151,21 @@ async def rewrite_bullets(bullets: list[dict], keywords: str, original_full_text
     return optimized, fabrication_flags
 
 
+def _safe_str_from_kw(kw) -> str:
+    if isinstance(kw, dict):
+        return kw.get("name", kw.get("skill", kw.get("text", str(kw))))
+    return str(kw)
+
+
 def identify_gaps(resume_structured: dict, jd_keywords: dict) -> list[str]:
     resume_text = json.dumps(resume_structured).lower() if resume_structured else ""
     gaps = []
 
     for key in ("hard_skills", "must_have", "ats_keywords"):
         for kw in jd_keywords.get(key, []):
-            if kw.lower() not in resume_text:
-                gaps.append(kw)
+            kw_str = _safe_str_from_kw(kw)
+            if kw_str.lower() not in resume_text:
+                gaps.append(kw_str)
 
     return gaps
 
@@ -177,7 +186,8 @@ async def optimize_summary(summary_text: str, jd_keywords_str: str) -> str:
     if not summary_text.strip():
         return summary_text
     client = get_llm_client()
-    response = client.chat.completions.create(
+    response = await asyncio.to_thread(
+        client.chat.completions.create,
         model=settings.AI_MODEL_REWRITE,
         messages=[
             {"role": "system", "content": "You are a professional resume writer. Never fabricate experience."},
@@ -193,7 +203,8 @@ async def reorder_skills(skills_list: list[str], jd_keywords_str: str) -> list[s
     if not skills_list or len(skills_list) < 2:
         return skills_list
     client = get_llm_client()
-    response = client.chat.completions.create(
+    response = await asyncio.to_thread(
+        client.chat.completions.create,
         model=settings.AI_MODEL_EXTRACT,
         messages=[
             {"role": "system", "content": "Reorder skills to prioritize job description matches. Output comma-separated only."},

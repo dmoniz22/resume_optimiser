@@ -17,7 +17,7 @@ from app.schemas.optimization import (
     OptimizationInitResponse,
     OptimizationListResponse,
 )
-from app.services.scoring import calculate_pre_score, calculate_post_score
+from app.services.scoring import calculate_pre_score, calculate_post_score, calculate_optimized_score
 from app.services.optimizer import identify_gaps, extract_bullets_from_resume, rewrite_bullets, optimize_summary, reorder_skills
 from app.services.pdf_generator import generate_pdf, generate_cover_letter_pdf
 from app.services.cover_letter import generate_cover_letter_text
@@ -178,6 +178,26 @@ async def process_optimization(
     return optimization
 
 
+def _reconstruct_optimized_text(structured_data: dict, optimized_bullets: list[dict]) -> str:
+    parts = []
+    opt_by_key = {(b["section"], b["bullet_index"]): b["optimized"] for b in optimized_bullets}
+
+    for section in structured_data.get("sections", []):
+        title = section.get("title", "")
+        if title:
+            parts.append(title)
+        for i, bullet in enumerate(section.get("bullets", [])):
+            key = (title, i)
+            if key in opt_by_key:
+                parts.append(opt_by_key[key])
+            elif isinstance(bullet, dict):
+                parts.append(bullet.get("text", str(bullet)))
+            else:
+                parts.append(str(bullet))
+
+    return "\n".join(parts)
+
+
 async def _run_optimization_pipeline(optimization_id: str, user_id: str):
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Optimization).where(Optimization.id == optimization_id))
@@ -202,8 +222,6 @@ async def _run_optimization_pipeline(optimization_id: str, user_id: str):
                 await db.commit()
                 return
 
-            pre_score = await calculate_pre_score(str(resume.id), str(jd.id), db)
-
             resume_structured = resume.structured_data or {}
             jd_keywords = jd.extracted_keywords or {}
 
@@ -214,7 +232,12 @@ async def _run_optimization_pipeline(optimization_id: str, user_id: str):
                            for i in range(min(20, len(resume.parsed_text.split("\n")))) if resume.parsed_text.split("\n")[i].strip()]
 
             original_bullets_data = [{"section": b["section"], "bullet_index": b["bullet_index"], "text": b["text"]} for b in bullets]
-            keywords_str = ", ".join(gaps[:30]) if gaps else ", ".join(jd_keywords.get("hard_skills", []) + jd_keywords.get("soft_skills", []))
+            keywords_str = ", ".join(gaps[:30]) if gaps else ", ".join(str(k) for k in jd_keywords.get("hard_skills", []) + jd_keywords.get("soft_skills", []))
+            pre_text = _reconstruct_optimized_text(
+                resume_structured,
+                [{"section": b["section"], "bullet_index": b["bullet_index"], "optimized": b["text"]} for b in original_bullets_data],
+            )
+            pre_score = await calculate_optimized_score(pre_text, str(jd.id), db)
 
             optimized_bullets, fabrication_flags = await rewrite_bullets(
                 bullets, keywords_str, resume.parsed_text or ""
@@ -253,7 +276,8 @@ async def _run_optimization_pipeline(optimization_id: str, user_id: str):
             resume.structured_data = resume_structured
             await db.commit()
 
-            post_score = await calculate_post_score(str(resume.id), str(jd.id), db)
+            optimized_text = _reconstruct_optimized_text(resume_structured, optimized_bullets)
+            post_score = await calculate_optimized_score(optimized_text, str(jd.id), db)
 
             optimization.pre_score = pre_score
             optimization.post_score = post_score
@@ -267,7 +291,7 @@ async def _run_optimization_pipeline(optimization_id: str, user_id: str):
 
             try:
                 cover_body = await generate_cover_letter_text(
-                    resume.parsed_text or "",
+                    optimized_text or "",
                     jd.raw_text,
                 )
                 optimization.cover_letter_text = cover_body
@@ -311,7 +335,7 @@ async def regenerate_bullet(
 
     bullets = extract_bullets_from_resume(resume.structured_data or {})
     jd_keywords = jd.extracted_keywords or {}
-    keywords_str = ", ".join(jd_keywords.get("hard_skills", []) + jd_keywords.get("soft_skills", []))
+    keywords_str = ", ".join(str(k) for k in jd_keywords.get("hard_skills", []) + jd_keywords.get("soft_skills", []))
 
     optimized_bullets, fabrication_flags = await rewrite_bullets(
         bullets, keywords_str, resume.parsed_text or ""

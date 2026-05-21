@@ -5,6 +5,7 @@ import fitz
 from docx import Document
 from app.config import settings
 from app.services.llm_client import get_llm_client
+import asyncio
 
 EXTRACT_META_PROMPT = """Extract basic metadata from this resume. Output ONLY valid JSON.
 
@@ -192,7 +193,8 @@ async def parse_resume_text(raw_text: str) -> dict:
     # AI metadata extraction
     try:
         client = get_llm_client()
-        resp = client.chat.completions.create(
+        resp = await asyncio.to_thread(
+            client.chat.completions.create,
             model=settings.AI_MODEL_EXTRACT,
             messages=[
                 {"role": "system", "content": "Output ONLY valid JSON."},

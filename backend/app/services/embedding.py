@@ -1,3 +1,4 @@
+import asyncio
 import numpy as np
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +16,8 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 async def generate_embedding(text: str) -> list[float]:
     client = get_embed_client()
-    response = client.embeddings.create(
+    response = await asyncio.to_thread(
+        client.embeddings.create,
         model=settings.EMBEDDING_MODEL,
         input=text[:8000],
     )
