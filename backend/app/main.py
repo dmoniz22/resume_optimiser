@@ -3,6 +3,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from app.routers import auth, resumes, jds, optimizations, billing, content, internal_agents
+from app.config import settings
+
+origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
+if settings.NEXT_PUBLIC_APP_URL not in origins:
+    origins.append(settings.NEXT_PUBLIC_APP_URL)
 
 
 @asynccontextmanager
@@ -18,7 +23,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

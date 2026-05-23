@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     INTERNAL_API_KEY: str = "change-me-in-production"
 
     # App
+    CORS_ORIGINS: str = "http://localhost:3000"
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000/api"
     NEXT_PUBLIC_APP_URL: str = "http://localhost:3000"
     DOMAIN: str = "localhost"
