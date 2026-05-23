@@ -55,7 +55,7 @@ export default function ResumeDetailPage() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 360000); // 6 min
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/resumes/${id}/reparse`, {
+      const res = await fetch(`/api/v1/resumes/${id}/reparse`, {
         method: "POST",
         headers: authHeaders,
         signal: controller.signal,
