@@ -174,6 +174,8 @@ def extract_bullets_from_resume(structured_data: dict) -> list[dict]:
     bullets = []
     for section in structured_data.get("sections", []):
         for i, bullet in enumerate(section.get("bullets", [])):
+            if isinstance(bullet, dict) and bullet.get("is_role_title"):
+                continue
             bullets.append({
                 "section": section["title"],
                 "bullet_index": i,

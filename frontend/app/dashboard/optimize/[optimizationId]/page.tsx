@@ -41,6 +41,7 @@ export default function OptimizationResultPage() {
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("modern");
+  const [selectedFormat, setSelectedFormat] = useState("pdf");
   const [editMode, setEditMode] = useState(false);
   const [editedBullets, setEditedBullets] = useState<Bullet[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -110,18 +111,18 @@ export default function OptimizationResultPage() {
     setDownloading(true);
     try {
       const genRes = await fetch(
-        `/api/v1/optimizations/${optimizationId}/pdf?template=${selectedTemplate}`,
+        `/api/v1/optimizations/${optimizationId}/pdf?template=${selectedTemplate}&format=${selectedFormat}`,
         { method: "POST", headers: authHeaders }
       );
       if (!genRes.ok) {
-        alert("Failed to generate PDF");
+        alert("Failed to generate file");
         return;
       }
       const blob = await genRes.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `optimized_resume_${optimizationId}.pdf`;
+      a.download = `optimized_resume_${optimizationId}.${selectedFormat}`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -170,6 +171,19 @@ export default function OptimizationResultPage() {
               </select>
             </div>
           )}
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">Format:</label>
+            <select
+              value={selectedFormat}
+              onChange={(e) => setSelectedFormat(e.target.value)}
+              className="rounded border px-2 py-1.5 text-sm"
+            >
+              <option value="pdf">PDF</option>
+              <option value="docx">DOCX</option>
+              <option value="txt">TXT</option>
+            </select>
+          </div>
 
           {editMode ? (
             <>

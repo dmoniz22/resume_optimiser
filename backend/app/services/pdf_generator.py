@@ -50,6 +50,13 @@ TEMPLATES = {
         text-align: justify;
     }
     .bullet::before { content: "\\2022 "; color: #2c3e50; }
+    .role-title {
+        font-weight: 700;
+        font-size: 10.5pt;
+        margin-top: 6pt;
+        margin-bottom: 1pt;
+        color: #1a1a1a;
+    }
     .skills-line {
         margin-top: 2pt;
         line-height: 1.5;
@@ -110,6 +117,13 @@ TEMPLATES = {
         text-align: justify;
     }
     .bullet::before { content: "\\2013 "; font-weight: 700; }
+    .role-title {
+        font-weight: 700;
+        font-size: 10.5pt;
+        margin-top: 6pt;
+        margin-bottom: 1pt;
+        color: #000;
+    }
     .skills-line {
         margin-top: 2pt;
         line-height: 1.5;
@@ -168,6 +182,13 @@ TEMPLATES = {
         text-align: justify;
     }
     .bullet::before { content: "\\2022 "; }
+    .role-title {
+        font-weight: 700;
+        font-size: 10pt;
+        margin-top: 5pt;
+        margin-bottom: 1pt;
+        color: #1a1a1a;
+    }
     .skills-line {
         margin-top: 1pt;
         font-size: 8.5pt;
@@ -238,6 +259,13 @@ TEMPLATES = {
         padding-left: 14pt;
     }
     .bullet::before { content: "\\25B8 "; color: #2563eb; font-size: 8pt; }
+    .role-title {
+        font-weight: 700;
+        font-size: 10.5pt;
+        margin-top: 6pt;
+        margin-bottom: 1pt;
+        color: #2563eb;
+    }
     .skills-line {
         margin-top: 2pt;
         line-height: 1.5;
@@ -305,6 +333,7 @@ def build_resume_html(structured_data: dict, optimized_bullets: list[dict] | Non
         for i, bullet in enumerate(bullets):
             text = bullet.get("text", bullet) if isinstance(bullet, dict) else bullet
             bullet_text = text
+            is_role = isinstance(bullet, dict) and bullet.get("is_role_title")
 
             if optimized_bullets:
                 for opt in optimized_bullets:
@@ -314,7 +343,11 @@ def build_resume_html(structured_data: dict, optimized_bullets: list[dict] | Non
 
             if not bullet_text or not bullet_text.strip():
                 continue
-            section_html += f'<div class="bullet">{bullet_text}</div>'
+
+            if is_role:
+                section_html += f'<div class="role-title">{bullet_text}</div>'
+            else:
+                section_html += f'<div class="bullet">{bullet_text}</div>'
 
         sections_html.append(section_html)
 
@@ -390,4 +423,139 @@ async def generate_cover_letter_pdf(
     output_path = os.path.join(settings.UPLOAD_DIR, f"{optimization_id}_cover.pdf")
 
     HTML(string=html).write_pdf(output_path)
+    return output_path
+
+
+def _flatten_bullets(structured_data: dict, optimized_bullets: list[dict] | None = None) -> list[dict]:
+    items = []
+    for section in structured_data.get("sections", []):
+        title = section.get("title", "").strip()
+        if not title:
+            continue
+        items.append({"type": "section", "text": title})
+        for i, bullet in enumerate(section.get("bullets", [])):
+            text = bullet.get("text", bullet) if isinstance(bullet, dict) else bullet
+            is_role = isinstance(bullet, dict) and bullet.get("is_role_title")
+
+            if optimized_bullets:
+                for opt in optimized_bullets:
+                    if opt.get("section") == title and opt.get("bullet_index") == i:
+                        text = opt.get("optimized", text)
+                        break
+
+            if not text or not text.strip():
+                continue
+
+            if is_role:
+                items.append({"type": "role", "text": text})
+            else:
+                items.append({"type": "bullet", "text": text})
+
+    skills = structured_data.get("skills_detected", {}) or {}
+    hard_skills = skills.get("hard", [])
+    existing_skill_titles = [s.get("title", "").lower() for s in structured_data.get("sections", [])]
+    if hard_skills and not any(t in ("skills", "technical skills", "core competencies") for t in existing_skill_titles):
+        items.append({"type": "section", "text": "Skills"})
+        items.append({"type": "skills", "text": ", ".join(hard_skills)})
+
+    education = structured_data.get("education", []) or []
+    if education:
+        has_edu_section = any(t.lower() in ("education", "academics") for t in (s.get("title", "") for s in structured_data.get("sections", [])))
+        if not has_edu_section:
+            items.append({"type": "section", "text": "Education"})
+            for edu in education:
+                degree = edu.get("degree", "")
+                school = edu.get("school", "")
+                year = edu.get("year", "")
+                parts = [p for p in [degree, school, str(year) if year else ""] if p]
+                items.append({"type": "bullet", "text": " — ".join(parts)})
+
+    return items
+
+
+async def generate_docx(optimization_id: str, structured_data: dict, optimized_bullets: list[dict] | None = None) -> str:
+    from docx import Document
+    from docx.shared import Pt, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    doc = Document()
+    style = doc.styles["Normal"]
+    font = style.font
+    font.name = "Calibri"
+    font.size = Pt(10.5)
+    style.paragraph_format.space_after = Pt(2)
+    style.paragraph_format.space_before = Pt(0)
+
+    name = structured_data.get("full_name", "")
+    email = structured_data.get("email", "")
+    phone = structured_data.get("phone", "")
+    location = structured_data.get("location", "")
+    contact_parts = [p for p in [email, phone, location] if p]
+    contact_line = "  |  ".join(contact_parts)
+
+    name_para = doc.add_paragraph()
+    name_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = name_para.add_run(name)
+    run.bold = True
+    run.font.size = Pt(14)
+
+    if contact_line:
+        contact_para = doc.add_paragraph()
+        contact_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = contact_para.add_run(contact_line)
+        run.font.size = Pt(9)
+        run.font.color.rgb = None
+
+    items = _flatten_bullets(structured_data, optimized_bullets)
+    for item in items:
+        if item["type"] == "section":
+            para = doc.add_paragraph()
+            para.paragraph_format.space_before = Pt(10)
+            run = para.add_run(item["text"].upper())
+            run.bold = True
+            run.font.size = Pt(11)
+        elif item["type"] == "role":
+            para = doc.add_paragraph()
+            para.paragraph_format.space_before = Pt(6)
+            run = para.add_run(item["text"])
+            run.bold = True
+        elif item["type"] == "skills":
+            para = doc.add_paragraph(item["text"])
+            para.paragraph_format.left_indent = Inches(0.25)
+        else:
+            para = doc.add_paragraph(f"\u2022 {item['text']}")
+            para.paragraph_format.left_indent = Inches(0.25)
+
+    output_path = os.path.join(settings.UPLOAD_DIR, f"{optimization_id}.docx")
+    doc.save(output_path)
+    return output_path
+
+
+async def generate_txt(optimization_id: str, structured_data: dict, optimized_bullets: list[dict] | None = None) -> str:
+    name = structured_data.get("full_name", "")
+    email = structured_data.get("email", "")
+    phone = structured_data.get("phone", "")
+    location = structured_data.get("location", "")
+    contact_parts = [p for p in [email, phone, location] if p]
+    contact_line = "  |  ".join(contact_parts)
+
+    lines = [name, contact_line, ""]
+
+    items = _flatten_bullets(structured_data, optimized_bullets)
+    for item in items:
+        if item["type"] == "section":
+            lines.append("")
+            lines.append(item["text"].upper())
+            lines.append("-" * len(item["text"]))
+        elif item["type"] == "role":
+            lines.append("")
+            lines.append(item["text"])
+        elif item["type"] == "skills":
+            lines.append(item["text"])
+        else:
+            lines.append(f"  \u2022 {item['text']}")
+
+    output_path = os.path.join(settings.UPLOAD_DIR, f"{optimization_id}.txt")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
     return output_path

@@ -149,7 +149,7 @@ async def parse_resume_text(raw_text: str) -> dict:
                 break
         
         if is_role_start(line):
-            exp_bullets.append({"text": f"── {line} ──", "is_quantified": False})
+            exp_bullets.append({"text": line, "is_role_title": True, "is_quantified": False})
         else:
             exp_bullets.append({"text": line, "is_quantified": False})
         i += 1

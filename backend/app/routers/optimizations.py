@@ -20,7 +20,7 @@ from app.schemas.optimization import (
 )
 from app.services.scoring import calculate_pre_score, calculate_post_score, calculate_optimized_score
 from app.services.optimizer import identify_gaps, extract_bullets_from_resume, rewrite_bullets, optimize_summary, reorder_skills
-from app.services.pdf_generator import generate_pdf, generate_cover_letter_pdf, TEMPLATES
+from app.services.pdf_generator import generate_pdf, generate_cover_letter_pdf, generate_docx, generate_txt, TEMPLATES
 from app.services.cover_letter import generate_cover_letter_text
 from app.config import settings
 
@@ -378,6 +378,7 @@ async def update_optimization(
 async def generate_optimization_pdf(
     optimization_id: uuid.UUID,
     template: str = "modern",
+    format: str = "pdf",
     token: dict = Depends(verify_token),
     db: AsyncSession = Depends(get_db),
 ):
@@ -395,6 +396,8 @@ async def generate_optimization_pdf(
 
     if template not in TEMPLATES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown template: {template}")
+    if format not in ("pdf", "docx", "txt"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown format: {format}")
 
     resume_result = await db.execute(select(Resume).where(Resume.id == optimization.resume_id))
     resume = resume_result.scalar_one_or_none()
@@ -404,16 +407,24 @@ async def generate_optimization_pdf(
     resume_structured = resume.structured_data or {}
     optimized_bullets = optimization.optimized_bullets or []
 
-    pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets, template)
-    optimization.output_file_path = pdf_path
+    if format == "pdf":
+        output_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets, template)
+        media_type = "application/pdf"
+        filename = f"optimized_resume_{optimization_id}.pdf"
+    elif format == "docx":
+        output_path = await generate_docx(str(optimization.id), resume_structured, optimized_bullets)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = f"optimized_resume_{optimization_id}.docx"
+    else:
+        output_path = await generate_txt(str(optimization.id), resume_structured, optimized_bullets)
+        media_type = "text/plain"
+        filename = f"optimized_resume_{optimization_id}.txt"
+
+    optimization.output_file_path = output_path
     optimization.template = template
     await db.commit()
 
-    return FileResponse(
-        pdf_path,
-        media_type="application/pdf",
-        filename=f"optimized_resume_{optimization_id}.pdf",
-    )
+    return FileResponse(output_path, media_type=media_type, filename=filename)
 
 
 @router.get("/templates")
