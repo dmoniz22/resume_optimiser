@@ -109,11 +109,12 @@ export default function AdminPage() {
     setUsers(Array.isArray(await res.json()) ? await res.json() : []);
   }
 
-  async function createUser(e: React.FormEvent) {
+  async function createUser(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    const target = e.currentTarget;
+    const formData = new FormData(target);
     const body: Record<string, string> = {};
-    form.forEach((v, k) => { body[k] = v as string; });
+    formData.forEach((v, k) => { body[k] = v as string; });
     const res = await fetch("/api/v1/internal/agents/users", {
       method: "POST",
       headers: authHeaders(),
@@ -123,7 +124,7 @@ export default function AdminPage() {
       alert((await res.json()).detail || "Failed to create user");
       return;
     }
-    e.currentTarget.reset();
+    target.reset();
     const usersRes = await fetch("/api/v1/internal/agents/users", { headers: authHeaders() });
     setUsers(Array.isArray(await usersRes.json()) ? await usersRes.json() : []);
   }
