@@ -14,12 +14,13 @@ from app.models.subscription import CreditUsage, SubscriptionTier, Subscription
 from app.schemas.optimization import (
     OptimizationRequest,
     OptimizationResponse,
+    OptimizationUpdate,
     OptimizationInitResponse,
     OptimizationListResponse,
 )
 from app.services.scoring import calculate_pre_score, calculate_post_score, calculate_optimized_score
 from app.services.optimizer import identify_gaps, extract_bullets_from_resume, rewrite_bullets, optimize_summary, reorder_skills
-from app.services.pdf_generator import generate_pdf, generate_cover_letter_pdf
+from app.services.pdf_generator import generate_pdf, generate_cover_letter_pdf, TEMPLATES
 from app.services.cover_letter import generate_cover_letter_text
 from app.config import settings
 
@@ -286,9 +287,6 @@ async def _run_optimization_pipeline(optimization_id: str, user_id: str):
             optimization.fabrication_flags = fabrication_flags
             optimization.model_used = settings.AI_MODEL_REWRITE
 
-            pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets)
-            optimization.output_file_path = pdf_path
-
             try:
                 cover_body = await generate_cover_letter_text(
                     optimized_text or "",
@@ -344,16 +342,86 @@ async def regenerate_bullet(
     optimization.optimized_bullets = optimized_bullets
     optimization.fabrication_flags = fabrication_flags
 
-    resume_structured = resume.structured_data or {}
-    try:
-        pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets)
-        optimization.output_file_path = pdf_path
-    except Exception:
-        pass
+    await db.commit()
+    await db.refresh(optimization)
+    return optimization
+
+
+@router.patch("/optimizations/{optimization_id}", response_model=OptimizationResponse)
+async def update_optimization(
+    optimization_id: uuid.UUID,
+    data: OptimizationUpdate,
+    token: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Optimization).where(
+            Optimization.id == optimization_id,
+            Optimization.user_id == token["user_id"],
+        )
+    )
+    optimization = result.scalar_one_or_none()
+    if not optimization:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimization not found")
+
+    if data.optimized_bullets is not None:
+        optimization.optimized_bullets = data.optimized_bullets
+    if data.template is not None:
+        optimization.template = data.template
 
     await db.commit()
     await db.refresh(optimization)
     return optimization
+
+
+@router.post("/optimizations/{optimization_id}/pdf")
+async def generate_optimization_pdf(
+    optimization_id: uuid.UUID,
+    template: str = "modern",
+    token: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Optimization).where(
+            Optimization.id == optimization_id,
+            Optimization.user_id == token["user_id"],
+        )
+    )
+    optimization = result.scalar_one_or_none()
+    if not optimization:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Optimization not found")
+    if optimization.status != "completed":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Optimization is not completed")
+
+    if template not in TEMPLATES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown template: {template}")
+
+    resume_result = await db.execute(select(Resume).where(Resume.id == optimization.resume_id))
+    resume = resume_result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
+
+    resume_structured = resume.structured_data or {}
+    optimized_bullets = optimization.optimized_bullets or []
+
+    pdf_path = await generate_pdf(str(optimization.id), resume_structured, optimized_bullets, template)
+    optimization.output_file_path = pdf_path
+    optimization.template = template
+    await db.commit()
+
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename=f"optimized_resume_{optimization_id}.pdf",
+    )
+
+
+@router.get("/templates")
+async def list_templates():
+    return [
+        {"id": key, "name": val["name"], "description": val["description"]}
+        for key, val in TEMPLATES.items()
+    ]
 
 
 @router.get("/optimizations/{optimization_id}/download")

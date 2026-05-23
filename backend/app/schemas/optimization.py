@@ -26,10 +26,16 @@ class OptimizationResponse(BaseModel):
     error_message: str | None
     fabrication_flags: Any | None = None
     credit_cost: int
+    template: str = "modern"
     created_at: datetime
     completed_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class OptimizationUpdate(BaseModel):
+    optimized_bullets: list[dict] | None = None
+    template: str | None = None
 
 
 class OptimizationInitResponse(BaseModel):

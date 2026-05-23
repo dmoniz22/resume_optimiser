@@ -24,6 +24,7 @@ class Optimization(Base):
     model_used: Mapped[str | None] = mapped_column(String(100))
     error_message: Mapped[str | None] = mapped_column(Text)
     fabrication_flags: Mapped[dict | None] = mapped_column(JSONB)
+    template: Mapped[str] = mapped_column(String(50), default="modern", server_default="modern")
     credit_cost: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
