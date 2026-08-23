@@ -7,19 +7,44 @@ import Link from "next/link";
 
 const tiers = [
   {
-    name: "Free", price: "$0", period: "forever",
+    name: "Free",
+    price: "$0",
+    period: "forever",
     features: ["3 optimizations/month", "Basic ATS score", "Bullet-by-bullet rewriting", "1 resume storage", "PDF export"],
     priceId: null,
   },
   {
-    name: "Pro", price: "$19", period: "/month",
+    name: "Pro",
+    price: "$19",
+    period: "/month",
     features: ["Unlimited optimizations", "Detailed ATS score", "Cover letter generation", "10 resume storage", "PDF + DOCX export", "Multiple versions", "Standard email support"],
     priceId: "pro_monthly", highlight: true,
   },
   {
-    name: "Career", price: "$39", period: "/month",
+    name: "Career",
+    price: "$39",
+    period: "/month",
     features: ["Everything in Pro", "Priority AI processing", "Unlimited resume storage", "PDF + DOCX + TXT export", "LinkedIn sync", "Priority support"],
     priceId: "career_monthly",
+  },
+];
+
+const faqs = [
+  {
+    q: "Is Resume Optimizer really free?",
+    a: "Yes. The Free plan never charges a card and never expires: 3 ATS-scored optimizations per month, bullet-by-bullet rewriting, one stored resume, and PDF export. You only upgrade when you need unlimited optimizations.",
+  },
+  {
+    q: "How does the ATS score work?",
+    a: "Paste a job description and the AI compares your resume against the exact skills, keywords, and structure the posting asks for. You get a score before and after rewriting, so you can see what the changes bought you.",
+  },
+  {
+    q: "Will the AI fabricate experience?",
+    a: "No. Rewrites only sharpen what is already true in your resume — wording, order, and keyword alignment. The system never invents employers, titles, dates, or achievements.",
+  },
+  {
+    q: "Can I cancel anytime?",
+    a: "Yes. Pro and Career are month-to-month with one-click cancellation from your account page, and a 30-day money-back guarantee if you are not satisfied.",
   },
 ];
 
@@ -49,6 +74,7 @@ export default function PricingPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-6">
             <Link href={session ? "/dashboard" : "/"} className="text-xl font-bold text-indigo-600">Resume Optimizer</Link>
+            <Link href="/blog" className="hidden text-sm text-gray-600 hover:text-gray-900 sm:block">Blog</Link>
             {session && (
               <nav className="hidden sm:flex items-center gap-4">
                 <Link href="/dashboard" className="text-sm text-gray-600 hover:text-gray-900">Resumes</Link>
@@ -79,7 +105,7 @@ export default function PricingPage() {
         <div className="mx-auto grid max-w-5xl gap-8 md:grid-cols-3">
           {tiers.map((tier) => (
             <div key={tier.name} className={`rounded-xl border p-8 ${tier.highlight ? "border-indigo-500 shadow-lg ring-1 ring-indigo-500 bg-white" : "bg-white shadow-sm"}`}>
-              <h3 className="text-xl font-bold text-gray-900">{tier.name}</h3>
+              <h2 className="text-xl font-bold text-gray-900">{tier.name}</h2>
               <p className="mt-4">
                 <span className="text-4xl font-bold">{tier.price}</span>
                 <span className="text-gray-500">{tier.period}</span>
@@ -106,6 +132,24 @@ export default function PricingPage() {
               )}
             </div>
           ))}
+        </div>
+
+        <div className="mx-auto mt-12 max-w-3xl rounded-lg bg-indigo-50 px-6 py-5 text-center">
+          <p className="text-sm text-gray-700">
+            <span className="font-semibold text-indigo-700">Every plan includes</span> zero-fabrication rewriting, ATS-friendly PDF export, and your data stays yours — no training on your resume content.
+          </p>
+        </div>
+
+        <div className="mx-auto mt-16 max-w-3xl">
+          <h2 className="mb-6 text-2xl font-bold text-gray-900">Frequently asked questions</h2>
+          <div className="space-y-6">
+            {faqs.map((f) => (
+              <div key={f.q}>
+                <h3 className="text-lg font-semibold text-gray-900">{f.q}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-gray-600">{f.a}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

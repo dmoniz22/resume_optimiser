@@ -1,28 +1,10 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getPosts } from "@/lib/blog-server";
 
-interface Post {
-  id: string;
-  slug: string;
-  title: string;
-  meta_description: string | null;
-  keywords: string[] | null;
-  category: string | null;
-  published_at: string | null;
-}
+export const dynamic = "force-dynamic";
 
-export default function BlogPage() {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/v1/content/blog")
-      .then((r) => r.json())
-      .then((d) => setPosts(Array.isArray(d) ? d : d.posts || []))
-      .finally(() => setLoading(false));
-  }, []);
+export default async function BlogPage() {
+  const posts = await getPosts();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -30,6 +12,8 @@ export default function BlogPage() {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
           <Link href="/" className="text-xl font-bold text-indigo-600">Resume Optimizer</Link>
           <div className="flex items-center gap-4">
+            <Link href="/blog" className="text-sm font-medium text-indigo-600">Blog</Link>
+            <Link href="/pricing" className="text-sm text-gray-600 hover:text-gray-900">Pricing</Link>
             <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900">Sign In</Link>
             <Link href="/signup" className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">Sign Up</Link>
           </div>
@@ -40,9 +24,7 @@ export default function BlogPage() {
         <h1 className="mb-2 text-4xl font-bold text-gray-900">Blog</h1>
         <p className="mb-8 text-gray-600">Resume tips, career advice, and industry insights.</p>
 
-        {loading ? (
-          <p className="text-gray-500">Loading...</p>
-        ) : posts.length === 0 ? (
+        {posts.length === 0 ? (
           <p className="text-gray-500">No posts yet. Check back soon.</p>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">

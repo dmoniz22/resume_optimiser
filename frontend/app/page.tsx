@@ -1,4 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "AI Resume Optimizer — Tailor Your Resume to Any Job",
+  description:
+    "Paste your resume and a job description — we rewrite your bullets around the keywords ATS filters look for, score your match, and export a polished PDF.",
+};
 
 const tiers = [
   {
@@ -37,6 +44,8 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <span className="text-xl font-bold text-indigo-600">Resume Optimizer</span>
           <div className="flex items-center gap-4">
+            <Link href="/blog" className="text-sm text-gray-600 hover:text-gray-900">Blog</Link>
+            <Link href="/pricing" className="text-sm text-gray-600 hover:text-gray-900">Pricing</Link>
             <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900">Sign In</Link>
             <Link href="/signup" className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">Sign Up</Link>
           </div>
