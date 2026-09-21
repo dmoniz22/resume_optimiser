@@ -114,6 +114,18 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
             <p className="text-gray-400 italic">No content yet.</p>
           )}
         </article>
+
+        <div className="mt-12 rounded-lg border border-indigo-200 bg-indigo-50 p-6">
+          <h2 className="text-lg font-semibold text-gray-900">Keep reading</h2>
+          <p className="mt-2 text-sm text-gray-700">
+            <Link href="/how-to-beat-ats" className="font-medium text-indigo-600 underline">How to Beat ATS Resume Screening in 2026</Link>{" "}
+            — the 7 evidence-based tactics that actually move your match score.
+          </p>
+          <p className="mt-2 text-sm text-gray-700">
+            <Link href="/tools/keyword-gap" className="font-medium text-indigo-600 underline">Free ATS Keyword Gap Checker</Link>{" "}
+            — paste your resume and a job description; see exactly which keywords you're missing in 30 seconds.
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -2,9 +2,17 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "AI Resume Optimizer — Tailor Your Resume to Any Job",
+  title: "AI Resume Optimizer & ATS Checker — Free | ApplyStudio",
   description:
-    "Paste your resume and a job description — we rewrite your bullets around the keywords ATS filters look for, score your match, and export a polished PDF.",
+    "Rewrite, tailor, and score your resume against any job description in seconds. Free AI-powered ATS keyword gap reports. No sign-up required to start.",
+  alternates: { canonical: "https://applystudio.app" },
+  openGraph: {
+    title: "AI Resume Optimizer & ATS Checker — Free | ApplyStudio",
+    description:
+      "Rewrite, tailor, and score your resume against any job description in seconds. Free AI-powered ATS checking with real keyword gap reports.",
+    url: "https://applystudio.app",
+    type: "website",
+  },
 };
 
 const tiers = [
@@ -44,6 +52,8 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <span className="text-xl font-bold text-indigo-600">Resume Optimizer</span>
           <div className="flex items-center gap-4">
+            <Link href="/tools/keyword-gap" className="text-sm text-gray-600 hover:text-gray-900">Free ATS Checker</Link>
+            <Link href="/how-to-beat-ats" className="text-sm text-gray-600 hover:text-gray-900">ATS Guide</Link>
             <Link href="/blog" className="text-sm text-gray-600 hover:text-gray-900">Blog</Link>
             <Link href="/pricing" className="text-sm text-gray-600 hover:text-gray-900">Pricing</Link>
             <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900">Sign In</Link>
@@ -67,6 +77,11 @@ export default function LandingPage() {
             View Pricing
           </Link>
         </div>
+        <p className="mt-6 text-sm text-gray-500">
+          New: check your match for free with the{" "}
+          <Link href="/tools/keyword-gap" className="font-medium text-indigo-600 underline">ATS keyword gap checker</Link>{" "}
+          — or learn <Link href="/how-to-beat-ats" className="font-medium text-indigo-600 underline">how to beat ATS screening</Link>.
+        </p>
       </section>
 
       <section className="bg-white px-4 py-16">
@@ -131,7 +146,12 @@ export default function LandingPage() {
 
       <footer className="border-t bg-white px-4 py-8">
         <div className="mx-auto max-w-6xl text-center text-sm text-gray-500">
-          <p>&copy; {new Date().getFullYear()} Resume Architect. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} ApplyStudio. All rights reserved.</p>
+          <p className="mt-2 text-xs text-gray-400">
+            <Link href="/tools/keyword-gap" className="underline">Free ATS keyword checker</Link> ·{" "}
+            <Link href="/how-to-beat-ats" className="underline">How to beat ATS screening</Link> ·{" "}
+            <Link href="/blog" className="underline">Resume advice blog</Link>
+          </p>
         </div>
       </footer>
     </div>
