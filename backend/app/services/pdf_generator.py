@@ -49,7 +49,7 @@ TEMPLATES = {
         text-indent: -12pt;
         text-align: justify;
     }
-    .bullet::before { content: "\\2022 "; color: #2c3e50; }
+    .bullet::before { content: "\\2022"; color: #2c3e50; margin-right: 5pt; }
     .role-title {
         font-weight: 700;
         font-size: 10.5pt;
@@ -116,7 +116,7 @@ TEMPLATES = {
         text-indent: -14pt;
         text-align: justify;
     }
-    .bullet::before { content: "\\2013 "; font-weight: 700; }
+    .bullet::before { content: "\\2013"; font-weight: 700; margin-right: 5pt; }
     .role-title {
         font-weight: 700;
         font-size: 10.5pt;
@@ -181,7 +181,7 @@ TEMPLATES = {
         text-indent: -10pt;
         text-align: justify;
     }
-    .bullet::before { content: "\\2022 "; }
+    .bullet::before { content: "\\2022"; margin-right: 5pt; }
     .role-title {
         font-weight: 700;
         font-size: 10pt;
@@ -258,7 +258,7 @@ TEMPLATES = {
         border-left: 1.5pt solid #dbeafe;
         padding-left: 14pt;
     }
-    .bullet::before { content: "\\25B8 "; color: #2563eb; font-size: 8pt; }
+    .bullet::before { content: "\\25B8"; color: #2563eb; font-size: 8pt; margin-right: 5pt; }
     .role-title {
         font-weight: 700;
         font-size: 10.5pt;
@@ -287,6 +287,7 @@ def build_resume_html(structured_data: dict, optimized_bullets: list[dict] | Non
     email = structured_data.get("email", "")
     phone = structured_data.get("phone", "")
     location = structured_data.get("location", "")
+    linkedin = structured_data.get("linkedin", "")
 
     contact_parts = []
     if email:
@@ -295,6 +296,8 @@ def build_resume_html(structured_data: dict, optimized_bullets: list[dict] | Non
         contact_parts.append(phone)
     if location:
         contact_parts.append(location)
+    if linkedin:
+        contact_parts.append(linkedin)
     contact_line = "  |  ".join(contact_parts)
 
     sections_html = []
@@ -473,58 +476,153 @@ def _flatten_bullets(structured_data: dict, optimized_bullets: list[dict] | None
     return items
 
 
+def _set_bottom_border(paragraph, color: str = "2C3E50", size_pt: float = 1.0, space: int = 2) -> None:
+    """Draw a bottom rule under a paragraph (mirrors the PDF's border-bottom)."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    pPr = paragraph._p.get_or_add_pPr()
+    pBdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), str(max(2, int(round(size_pt * 8)))))  # eighths of a point
+    bottom.set(qn("w:space"), str(space))
+    bottom.set(qn("w:color"), color)
+    pBdr.append(bottom)
+    pPr.insert_element_before(pBdr, "w:shd", "w:tabs", "w:spacing", "w:ind", "w:jc", "w:rPr")
+
+
+def _set_char_spacing(run, points: float) -> None:
+    """Letter-spacing in twips (1/20 pt), matching the PDF's letter-spacing."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    rPr = run._element.get_or_add_rPr()
+    spacing = OxmlElement("w:spacing")
+    spacing.set(qn("w:val"), str(int(round(points * 20))))
+    rPr.append(spacing)
+
+
 async def generate_docx(optimization_id: str, structured_data: dict, optimized_bullets: list[dict] | None = None) -> str:
+    """Build the DOCX to match the 'modern' PDF template (navy rules, matching type scale)."""
     from docx import Document
-    from docx.shared import Pt, Inches
+    from docx.shared import Pt, Inches, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+    NAVY = RGBColor(0x2C, 0x3E, 0x50)
+    GREY = RGBColor(0x55, 0x55, 0x55)
+    INK = RGBColor(0x1A, 0x1A, 0x1A)
+
     doc = Document()
+
+    section = doc.sections[0]
+    section.top_margin = Inches(0.6)
+    section.bottom_margin = Inches(0.6)
+    section.left_margin = Inches(0.75)
+    section.right_margin = Inches(0.75)
+
     style = doc.styles["Normal"]
-    font = style.font
-    font.name = "Calibri"
-    font.size = Pt(10.5)
+    style.font.name = "Arial"
+    style.font.size = Pt(10.5)
+    style.font.color.rgb = INK
     style.paragraph_format.space_after = Pt(2)
     style.paragraph_format.space_before = Pt(0)
+    style.paragraph_format.line_spacing = 1.15
 
-    name = structured_data.get("full_name", "")
+    name = structured_data.get("full_name", "") or ""
     email = structured_data.get("email", "")
     phone = structured_data.get("phone", "")
     location = structured_data.get("location", "")
-    contact_parts = [p for p in [email, phone, location] if p]
+    linkedin = structured_data.get("linkedin", "")
+    contact_parts = [p for p in [email, phone, location, linkedin] if p]
     contact_line = "  |  ".join(contact_parts)
 
     name_para = doc.add_paragraph()
     name_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    name_para.paragraph_format.space_after = Pt(2)
     run = name_para.add_run(name)
     run.bold = True
-    run.font.size = Pt(14)
+    run.font.size = Pt(16)
+    run.font.name = "Arial"
+    run.font.color.rgb = INK
 
     if contact_line:
         contact_para = doc.add_paragraph()
         contact_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        contact_para.paragraph_format.space_after = Pt(8)
         run = contact_para.add_run(contact_line)
         run.font.size = Pt(9)
-        run.font.color.rgb = None
+        run.font.name = "Arial"
+        run.font.color.rgb = GREY
+        _set_bottom_border(contact_para, "2C3E50", 1.5, 6)
+    elif name:
+        _set_bottom_border(name_para, "2C3E50", 1.5, 6)
 
     items = _flatten_bullets(structured_data, optimized_bullets)
-    for item in items:
+    EDU_TITLES = ("education", "academics")
+    SKILL_TITLES = ("skills", "technical skills", "core competencies")
+    i = 0
+    while i < len(items):
+        item = items[i]
+
         if item["type"] == "section":
+            title = item["text"].strip()
+            key = title.lower()
+
             para = doc.add_paragraph()
-            para.paragraph_format.space_before = Pt(10)
-            run = para.add_run(item["text"].upper())
+            para.paragraph_format.space_before = Pt(12)
+            para.paragraph_format.space_after = Pt(5)
+            run = para.add_run(title.upper())
             run.bold = True
             run.font.size = Pt(11)
-        elif item["type"] == "role":
+            run.font.name = "Arial"
+            run.font.color.rgb = NAVY
+            _set_char_spacing(run, 0.8)
+            _set_bottom_border(para, "2C3E50", 0.8, 2)
+            i += 1
+
+            if key in SKILL_TITLES:
+                buf = []
+                while i < len(items) and items[i]["type"] != "section":
+                    buf.append(items[i]["text"])
+                    i += 1
+                if buf:
+                    p = doc.add_paragraph(", ".join(buf))
+                    p.paragraph_format.line_spacing = 1.3
+                continue
+
+            if key in EDU_TITLES:
+                while i < len(items) and items[i]["type"] != "section":
+                    p = doc.add_paragraph(items[i]["text"])
+                    p.paragraph_format.left_indent = Inches(0.17)
+                    p.paragraph_format.space_after = Pt(1)
+                    i += 1
+                continue
+
+            continue
+
+        if item["type"] == "role":
             para = doc.add_paragraph()
             para.paragraph_format.space_before = Pt(6)
+            para.paragraph_format.space_after = Pt(1)
             run = para.add_run(item["text"])
             run.bold = True
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = INK
         elif item["type"] == "skills":
             para = doc.add_paragraph(item["text"])
-            para.paragraph_format.left_indent = Inches(0.25)
+            para.paragraph_format.left_indent = Inches(0)
+            para.paragraph_format.line_spacing = 1.3
         else:
-            para = doc.add_paragraph(f"\u2022 {item['text']}")
-            para.paragraph_format.left_indent = Inches(0.25)
+            para = doc.add_paragraph()
+            para.paragraph_format.left_indent = Inches(0.17)
+            para.paragraph_format.first_line_indent = Inches(-0.17)
+            para.paragraph_format.space_after = Pt(3)
+            para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            bullet_run = para.add_run("\u2022  ")
+            bullet_run.font.color.rgb = NAVY
+            para.add_run(item["text"])
+        i += 1
 
     output_path = os.path.join(settings.UPLOAD_DIR, f"{optimization_id}.docx")
     doc.save(output_path)
@@ -536,7 +634,8 @@ async def generate_txt(optimization_id: str, structured_data: dict, optimized_bu
     email = structured_data.get("email", "")
     phone = structured_data.get("phone", "")
     location = structured_data.get("location", "")
-    contact_parts = [p for p in [email, phone, location] if p]
+    linkedin = structured_data.get("linkedin", "")
+    contact_parts = [p for p in [email, phone, location, linkedin] if p]
     contact_line = "  |  ".join(contact_parts)
 
     lines = [name, contact_line, ""]
